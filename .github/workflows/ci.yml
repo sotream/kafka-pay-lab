@@ -48,6 +48,13 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 3s --health-retries 10
+      # The image's default config is a single-node KRaft broker on localhost:9092, which the payments flow e2e uses.
+      kafka:
+        image: apache/kafka:4.3.1
+        ports: ['9092:9092']
+        options: >-
+          --health-cmd "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"
+          --health-interval 10s --health-timeout 10s --health-retries 10 --health-start-period 15s
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
