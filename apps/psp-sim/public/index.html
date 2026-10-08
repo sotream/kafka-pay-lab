@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>psp-sim · Payment provider simulator</title>
+    <style>
+      :root { --bg:#f6f7f9; --card:#fff; --text:#1c2230; --muted:#5b6475; --line:#dfe3ea; --accent:#2f5de3; --ok:#12794a; --warn:#9a6700; --bad:#b42318; }
+      @media (prefers-color-scheme: dark) { :root { --bg:#12151c; --card:#1a1f2a; --text:#e8ebf2; --muted:#9aa4b8; --line:#2b3242; --accent:#7b9bff; --ok:#4cc38a; --warn:#e3b341; --bad:#ff7b72; } }
+      * { box-sizing: border-box; }
+      body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, sans-serif; }
+      main { max-width:1000px; margin:0 auto; padding:24px 16px 48px; display:grid; gap:16px; }
+      h1 { margin:0; font-size:22px; } h2 { margin:0 0 4px; font-size:16px; }
+      .sub, small, .help { color:var(--muted); }
+      .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+      .row { display:flex; flex-wrap:wrap; gap:8px; }
+      .grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
+      button { font:inherit; padding:8px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); cursor:pointer; }
+      button:hover { border-color:var(--accent); } button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+      label { display:block; font-weight:600; margin-top:12px; } .help { display:block; font-size:13px; font-weight:400; }
+      input[type=range] { width:100%; } select, input[type=number] { font:inherit; width:100%; padding:6px; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; }
+      .val { font-variant-numeric:tabular-nums; color:var(--accent); }
+      table { width:100%; border-collapse:collapse; font-size:13px; } th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+      th { color:var(--muted); font-weight:600; } .scroll { max-height:340px; overflow:auto; }
+      .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+      .pill { display:inline-block; padding:2px 8px; border:1px solid var(--line); border-radius:999px; margin:2px 4px 2px 0; font-size:13px; }
+      .status { font-size:13px; } details summary { cursor:pointer; font-weight:600; } ol { margin:8px 0 0; padding-left:20px; }
+      code { background:var(--bg); padding:1px 5px; border-radius:4px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>psp-sim <span class="sub">· payment provider simulator</span></h1>
+        <div class="status" id="conn" title="Live connection to the simulator. If it says disconnected, the simulator process is down.">connecting…</div>
+      </header>
+
+      <details class="card">
+        <summary>How to use this page</summary>
+        <ol>
+          <li>Pick a <b>preset</b> to change how the fake payment provider behaves. Changes apply instantly to the next request.</li>
+          <li>Create payments in the <b>kafka-pay-lab dashboard</b> (or use the load button there) and watch the <b>request log</b> below fill up.</li>
+          <li>Fine-tune any setting with the controls, or force a single outcome by using a <b>magic amount</b> (see the table at the bottom).</li>
+        </ol>
+      </details>
+
+      <section class="card">
+        <h2>Presets</h2>
+        <small>One click sets every control below. Hover a button to see exactly what it sets.</small>
+        <div class="row" id="presets" style="margin-top:8px"></div>
+      </section>
+
+      <section class="grid">
+        <div class="card">
+          <h2>Speed</h2>
+          <label for="latencyMs" title="Base time the provider waits before answering. If this is above the API's timeout (3000 ms by default), requests count as failures.">Latency: <span class="val" id="latencyMs-v"></span> ms
+            <span class="help">How long every answer takes. Above ~3000 ms the API gives up and counts a failure.</span></label>
+          <input id="latencyMs" type="range" min="0" max="10000" step="50" />
+          <label for="jitterMs" title="Random extra delay between 0 and this value, added on top of the latency.">Jitter: <span class="val" id="jitterMs-v"></span> ms
+            <span class="help">Random extra delay, so answers do not arrive at an even pace.</span></label>
+          <input id="jitterMs" type="range" min="0" max="5000" step="50" />
+        </div>
+
+        <div class="card">
+          <h2>Failures</h2>
+          <label for="outage" title="Simulates the provider being broken. 503 = clear error answer. Hang = never answers (the API waits until its timeout). Reset = the connection is cut mid-request.">Outage
+            <span class="help">Break the provider completely. "Hang" and "Reset" are the nastiest for the API.</span></label>
+          <select id="outage">
+            <option value="none">None (working)</option>
+            <option value="http503">HTTP 503 (service unavailable)</option>
+            <option value="hang">Hang (never answers)</option>
+            <option value="reset">Connection reset</option>
+          </select>
+          <label for="failRate" title="Percentage of requests that randomly get an HTTP 503, even when there is no outage.">Random 503 rate: <span class="val" id="failRate-v"></span>%
+            <span class="help">A flaky provider: this share of requests fails at random.</span></label>
+          <input id="failRate" type="range" min="0" max="100" step="5" />
+        </div>
+
+        <div class="card">
+          <h2>Declines</h2>
+          <label for="declineRate" title="Percentage of requests that are refused for a business reason (not an error). The API does not retry these and the circuit breaker ignores them.">Decline rate: <span class="val" id="declineRate-v"></span>%
+            <span class="help">Share of payments refused for a business reason. These are final, not retried.</span></label>
+          <input id="declineRate" type="range" min="0" max="100" step="5" />
+          <label for="declineReason" title="Which reason a refused payment gets. 'Random' picks one of the four at random.">Decline reason
+            <span class="help">What the customer sees as the cause.</span></label>
+          <select id="declineReason">
+            <option value="random">Random</option>
+            <option value="insufficient_funds">Insufficient funds</option>
+            <option value="card_declined">Card declined</option>
+            <option value="card_expired">Card expired</option>
+            <option value="fraud_suspected">Fraud suspected</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Counters</h2>
+        <small>Totals since the simulator started, by outcome.</small>
+        <div id="counters" style="margin-top:8px"></div>
+      </section>
+
+      <section class="card">
+        <h2>Request log</h2>
+        <small>Newest first. "Why" tells which rule decided the outcome.</small>
+        <div class="scroll" style="margin-top:8px">
+          <table>
+            <thead><tr>
+              <th title="When the request was handled">Time</th>
+              <th title="Payment id sent as the Idempotency-Key. Repeating a key returns the earlier result without charging again.">Key</th>
+              <th title="Amount in minor units (cents). The last two digits can force an outcome.">Amount</th>
+              <th title="Delay applied before answering">Latency</th>
+              <th title="What the provider answered">Outcome</th>
+              <th title="Which rule decided: a magic amount, an outage, the random failure rate, the decline rate, or normal operation">Why</th>
+            </tr></thead>
+            <tbody id="log"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Magic amounts</h2>
+        <small>Amounts are in minor units (cents). If the amount ends in these two digits, that outcome is forced for that one payment, whatever the settings above say.</small>
+        <table style="margin-top:8px">
+          <tr><th>Ends in</th><th>Example</th><th>Result</th></tr>
+          <tr><td><code>51</code></td><td>1051 (10.51)</td><td>Declined: insufficient funds</td></tr>
+          <tr><td><code>52</code></td><td>1052</td><td>Declined: card declined</td></tr>
+          <tr><td><code>53</code></td><td>1053</td><td>Declined: card expired</td></tr>
+          <tr><td><code>54</code></td><td>1054</td><td>Declined: fraud suspected</td></tr>
+          <tr><td><code>91</code></td><td>1091</td><td>HTTP 503</td></tr>
+          <tr><td><code>92</code></td><td>1092</td><td>Never answers (hang)</td></tr>
+          <tr><td><code>93</code></td><td>1093</td><td>Approved after 5 extra seconds</td></tr>
+          <tr><td><code>94</code></td><td>1094</td><td>Connection reset</td></tr>
+        </table>
+      </section>
+    </main>
+
+    <script>
+      const SLIDERS = ['latencyMs', 'jitterMs', 'failRate', 'declineRate'];
+      const SELECTS = ['outage', 'declineReason'];
+      const HEALTHY = { latencyMs: 50, jitterMs: 50, outage: 'none', failRate: 0, declineRate: 0, declineReason: 'random' };
+      const PRESETS = [
+        { name: 'Healthy', tip: 'Latency 50 ms, no failures, no declines. The normal case.', state: HEALTHY },
+        { name: 'Slow', tip: 'Latency 2000 ms + 500 ms jitter. Still under the 3 s timeout, so payments succeed but the consumer falls behind and lag grows.', state: { ...HEALTHY, latencyMs: 2000, jitterMs: 500 } },
+        { name: 'Flaky', tip: '30% random HTTP 503 and 200 ms latency. Failures are intermittent, so retries usually work and the breaker may or may not open.', state: { ...HEALTHY, latencyMs: 200, failRate: 30 } },
+        { name: 'Outage', tip: 'Every request gets HTTP 503. The API retries, then the circuit breaker opens and the consumer pauses.', state: { ...HEALTHY, outage: 'http503' } },
+        { name: 'Broke customer', tip: 'Every payment is declined with "insufficient funds". Final answers: no retries, breaker stays closed.', state: { ...HEALTHY, declineRate: 100, declineReason: 'insufficient_funds' } },
+      ];
+
+      let state = { ...HEALTHY };
+      const $ = (id) => document.getElementById(id);
+
+      function render() {
+        for (const id of SLIDERS) { $(id).value = state[id]; $(id + '-v').textContent = state[id]; }
+        for (const id of SELECTS) $(id).value = state[id];
+        document.querySelectorAll('#presets button').forEach((b, i) => {
+          b.classList.toggle('active', Object.keys(HEALTHY).every((k) => PRESETS[i].state[k] === state[k]));
+        });
+      }
+
+      async function push(next) {
+        state = next; render();
+        const res = await fetch('/sim/state', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(state) });
+        if (!res.ok) alert('The simulator rejected these settings: ' + (await res.text()));
+      }
+
+      PRESETS.forEach((p) => {
+        const b = document.createElement('button');
+        b.textContent = p.name; b.title = p.tip;
+        b.onclick = () => push({ ...p.state });
+        $('presets').appendChild(b);
+      });
+      SLIDERS.forEach((id) => { $(id).oninput = () => { $(id + '-v').textContent = $(id).value; }; $(id).onchange = () => push({ ...state, [id]: Number($(id).value) }); });
+      SELECTS.forEach((id) => { $(id).onchange = () => push({ ...state, [id]: $(id).value }); });
+
+      const cls = (o) => (o === 'approved' || o === 'replayed' ? 'ok' : o.startsWith('declined') ? 'warn' : 'bad');
+      const WHY = { 'magic-amount': 'magic amount', outage: 'outage setting', 'fail-rate': 'random 503 rate', 'decline-rate': 'decline rate', normal: 'normal', 'idempotent-replay': 'same key seen before' };
+      function row(e) {
+        const tr = document.createElement('tr');
+        const cells = [new Date(e.at).toLocaleTimeString(), e.key.slice(0, 8), e.amount, e.latencyMs + ' ms', e.outcome, WHY[e.source] ?? e.source];
+        cells.forEach((text, i) => { const td = document.createElement('td'); td.textContent = text; if (i === 4) td.className = cls(e.outcome); tr.appendChild(td); });
+        return tr;
+      }
+      function renderCounters(counters) {
+        const el = $('counters'); el.replaceChildren();
+        const keys = Object.keys(counters).sort();
+        if (!keys.length) { el.textContent = 'No requests yet.'; return; }
+        keys.forEach((k) => { const s = document.createElement('span'); s.className = 'pill ' + cls(k); s.textContent = k + ': ' + counters[k]; el.appendChild(s); });
+      }
+
+      const source = new EventSource('/sim/events');
+      source.onopen = () => { $('conn').textContent = '● connected'; $('conn').className = 'status ok'; };
+      source.onerror = () => { $('conn').textContent = '● disconnected, retrying…'; $('conn').className = 'status bad'; };
+      source.onmessage = (m) => {
+        const ev = JSON.parse(m.data);
+        if (ev.type === 'snapshot') { state = ev.state; render(); $('log').replaceChildren(...ev.log.map(row)); renderCounters(ev.counters); }
+        if (ev.type === 'state') { state = ev.state; render(); }
+        if (ev.type === 'request') { $('log').prepend(row(ev.entry)); while ($('log').rows.length > 100) $('log').deleteRow(-1); renderCounters(ev.counters); }
+      };
+      render();
+    </script>
+  </body>
+</html>
