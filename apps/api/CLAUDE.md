@@ -20,6 +20,8 @@ test/                    e2e specs and helpers
 - Routes are under `/api/v1`; `/api/health/live` (process) and `/api/health/ready` (database, Redis) are version neutral. Swagger is at `/api/docs`.
 - Config comes from `ConfigService<EnvironmentVariables, true>`; add new variables to
   `env.validation.ts` (with a local default) and `.env.example`.
+- A new pipeline stage gets a span with `withSpan()` (`src/infrastructure/telemetry/trace-context.ts`);
+  the outbox row and Kafka headers carry the trace context ([ADR 0011](../../docs/adr/0011-trace-context-outbox-kafka.md)).
 - `vehicles` is the reference module: copy its shape for new features (`/new-module`).
 
 ## Add a module

@@ -1,6 +1,8 @@
+import { Registry } from '@prometheus-io/client';
 import { CircuitBreaker } from './circuit-breaker.js';
 import { Payment, PaymentStatus } from './entities/payment.entity.js';
 import { PaymentFeed } from './payment-feed.js';
+import { PaymentMetrics } from './payment-metrics.js';
 import { PaymentProcessor } from './payment-processor.js';
 import { TransientPspError } from './psp.client.js';
 import type { PspResult } from './psp.client.js';
@@ -29,6 +31,11 @@ function setup(payment: Payment | null, charge: () => Promise<PspResult>, affect
   const feed = new PaymentFeed();
   const seen: PaymentView[] = [];
   feed.payment$.subscribe((view) => seen.push(view));
+  const registry = new Registry();
+  const metrics = new PaymentMetrics(registry, {
+    outbox: () => Promise.resolve({ pending: 0, oldestAgeSeconds: 0 }),
+    lag: () => Promise.resolve(null),
+  });
   const processor = new PaymentProcessor(
     dataSource as never,
     { findOneBy: vi.fn().mockResolvedValue(payment) } as never,
@@ -36,8 +43,9 @@ function setup(payment: Payment | null, charge: () => Promise<PspResult>, affect
     new CircuitBreaker({ failureThreshold: 5, resetTimeoutMs: 1000 }),
     outbox as never,
     feed,
+    metrics,
   );
-  return { processor, manager, outbox, seen };
+  return { processor, manager, outbox, seen, registry };
 }
 
 const approved = () => Promise.resolve<PspResult>({ kind: 'approved', chargeId: 'ch_1' });
@@ -123,5 +131,16 @@ describe('PaymentProcessor.fail', () => {
       'payments.completed',
       'payments.dlq',
     ]);
+  });
+
+  it('counts a dead letter only when this worker really settled the payment', async () => {
+    const won = setup(pending(), approved);
+    const lost = setup(pending(), approved, 0);
+
+    await won.processor.fail('p1', 'psp_unavailable');
+    await lost.processor.fail('p1', 'psp_unavailable');
+
+    expect(await won.registry.metrics()).toContain('payments_dlq_total 1');
+    expect(await lost.registry.metrics()).toContain('payments_dlq_total 0');
   });
 });

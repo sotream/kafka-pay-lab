@@ -1,5 +1,13 @@
 {
   "$schema": "https://turborepo.com/schema.json",
+  "globalPassThroughEnv": [
+    "OTEL_ENABLED",
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "METRICS_ENABLED",
+    "METRICS_HOST",
+    "METRICS_PORT",
+    "LOG_DIR"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

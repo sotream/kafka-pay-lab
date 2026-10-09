@@ -1,12 +1,15 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SpanKind, trace } from '@opentelemetry/api';
 import { Kafka } from 'kafkajs';
-import type { Consumer } from 'kafkajs';
+import type { Consumer, KafkaMessage } from 'kafkajs';
 import type { EnvironmentVariables } from '../../infrastructure/config/env.validation.js';
 import { KAFKA_CLIENT } from '../../infrastructure/messaging/messaging.constants.js';
+import { extractHeaders, withSpan } from '../../infrastructure/telemetry/trace-context.js';
 import { CircuitBreaker, CircuitOpenError } from './circuit-breaker.js';
 import { PAYMENT_REQUESTED_TOPIC, parsePaymentId } from './payment-events.js';
+import { PaymentMetrics } from './payment-metrics.js';
 import { PaymentProcessor } from './payment-processor.js';
 import { processWithRetry } from './payment-retry.js';
 import { ensurePaymentTopics } from './payment-topics.js';
@@ -39,6 +42,7 @@ export class PaymentRequestedConsumer implements OnApplicationBootstrap, OnAppli
     private readonly config: ConfigService<EnvironmentVariables, true>,
     private readonly processor: PaymentProcessor,
     @Inject(PAYMENT_BREAKER) private readonly breaker: CircuitBreaker,
+    private readonly metrics: PaymentMetrics,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -55,7 +59,7 @@ export class PaymentRequestedConsumer implements OnApplicationBootstrap, OnAppli
     await this.consumer.subscribe({ topic: PAYMENT_REQUESTED_TOPIC, fromBeginning: true });
     await this.consumer.run({
       partitionsConsumedConcurrently: 1,
-      eachMessage: ({ message, heartbeat }) => this.handle(message.value, heartbeat),
+      eachMessage: ({ message, heartbeat }) => this.handle(message, heartbeat),
     });
   }
 
@@ -64,18 +68,42 @@ export class PaymentRequestedConsumer implements OnApplicationBootstrap, OnAppli
     await this.consumer?.disconnect();
   }
 
-  private async handle(value: Buffer | null, heartbeat: () => Promise<void>): Promise<void> {
-    const paymentId = parsePaymentId(value);
+  private async handle(message: KafkaMessage, heartbeat: () => Promise<void>): Promise<void> {
+    const paymentId = parsePaymentId(message.value);
     if (!paymentId) {
       this.logger.warn(`Skipping an unreadable ${PAYMENT_REQUESTED_TOPIC} message`);
       return;
     }
+    await withSpan(
+      `${PAYMENT_REQUESTED_TOPIC} process`,
+      {
+        kind: SpanKind.CONSUMER,
+        // The relay put the trace context in the headers; without it this starts a new trace.
+        parent: extractHeaders(message.headers),
+        attributes: {
+          'messaging.system': 'kafka',
+          'messaging.destination.name': PAYMENT_REQUESTED_TOPIC,
+          'payment.id': paymentId,
+        },
+      },
+      () => this.processUntilSettled(paymentId, heartbeat),
+    );
+  }
+
+  private async processUntilSettled(
+    paymentId: string,
+    heartbeat: () => Promise<void>,
+  ): Promise<void> {
+    // Taken once, so a message held behind an open breaker counts its whole wait.
+    const started = performance.now();
     while (!this.stopped) {
       try {
-        await processWithRetry(this.processor, paymentId, {
+        const outcome = await processWithRetry(this.processor, paymentId, {
           maxAttempts: this.config.get('PAYMENT_MAX_ATTEMPTS', { infer: true }),
           retryBaseMs: this.config.get('PAYMENT_RETRY_BASE_MS', { infer: true }),
+          onRetry: () => this.metrics.retried(),
         });
+        this.metrics.processed(outcome, (performance.now() - started) / 1000);
         return;
       } catch (error) {
         if (!(error instanceof CircuitOpenError)) throw error;
@@ -88,6 +116,7 @@ export class PaymentRequestedConsumer implements OnApplicationBootstrap, OnAppli
   private async waitForProbe(heartbeat: () => Promise<void>): Promise<void> {
     const waitMs = this.breaker.snapshot().retryInMs + PROBE_MARGIN_MS;
     this.logger.warn(`Circuit open: holding the current message for ${waitMs} ms`);
+    trace.getActiveSpan()?.addEvent('breaker.hold', { wait_ms: waitMs });
     for (let left = waitMs; left > 0 && !this.stopped; left -= HEARTBEAT_EVERY_MS) {
       await sleep(Math.min(left, HEARTBEAT_EVERY_MS));
       await heartbeat();

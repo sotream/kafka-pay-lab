@@ -26,6 +26,8 @@ Sign in (see [Authentication](authentication.md)) and create a vehicle in the we
 
 - Kafka UI at http://localhost:8080: Topics, `vehicle.created`, Messages.
 - API logs: the example consumer prints `Received vehicle.created: …`.
+- To follow one payment across HTTP, outbox, Kafka and the provider as a single trace, see the
+  [observability walkthrough](observability-walkthrough.md).
 - Or from the broker container:
   `docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 --topic vehicle.created --from-beginning`
 

@@ -1,0 +1,120 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: kafka-pay-lab
+    folder: kafka-pay-lab
+    interval: 10s
+    rules:
+      - uid: outbox-age-high
+        title: Outbox oldest pending row is too old
+        condition: C
+        for: 30s
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The relay is not publishing: Kafka is down or the relay is stuck'
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: max(outbox_oldest_pending_age_seconds)
+              instant: true
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [30]
+      - uid: dlq-growing
+        title: Dead-letter topic is growing
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: critical
+        annotations:
+          summary: Payments used up their retries and were sent to payments.dlq
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: sum(increase(payments_dlq_total[2m]))
+              instant: true
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+      - uid: breaker-open-too-long
+        title: Circuit breaker has been open too long
+        condition: C
+        for: 30s
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: critical
+        annotations:
+          summary: The provider keeps failing; consumer lag grows while the breaker stays open
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            # While the outage lasts the breaker only leaves OPEN for the short HALF_OPEN probe,
+            # so look at the share of the last 30 seconds rather than the instantaneous state.
+            model:
+              refId: A
+              expr: avg_over_time(payments_breaker_state{state="OPEN"}[30s])
+              instant: true
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.8]

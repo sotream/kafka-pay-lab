@@ -3,6 +3,7 @@ import type {
   EventPublisher,
   PublishedEvent,
 } from '../src/infrastructure/messaging/event-publisher.port.js';
+import { PaymentsService } from '../src/modules/payments/payments.service.js';
 import { createTestApp } from './helpers/test-app.js';
 import type { TestApp } from './helpers/test-app.js';
 
@@ -65,5 +66,14 @@ describe('outbox relay (e2e)', () => {
     publisher.failAfter = null;
     expect(await relay.tick()).toBe(3);
     expect(publisher.keys).toEqual(['k1', 'k2', 'k3', 'k4', 'k5']);
+  });
+
+  it('stores no traceparent when tracing is off', async () => {
+    await ctx.app.get(PaymentsService).create({ amount: 1000, currency: 'USD', cardToken: 'tok' });
+
+    const [row] = await ctx.dataSource.query<{ traceparent: string | null }[]>(
+      'SELECT traceparent FROM outbox_events',
+    );
+    expect(row?.traceparent).toBeNull();
   });
 });

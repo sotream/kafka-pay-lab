@@ -1,10 +1,29 @@
 import { Logger } from '@nestjs/common';
 import type { OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import { SpanKind } from '@opentelemetry/api';
 import type { DataSource } from 'typeorm';
 import type { EventPublisher } from '../messaging/event-publisher.port.js';
+import { contextFromTraceparent, injectHeaders, withSpan } from '../telemetry/trace-context.js';
 import { OutboxEvent } from './entities/outbox-event.entity.js';
 
 const BATCH_SIZE = 50;
+
+/** The row's saved context is the parent, because the request that wrote it is long gone by now. */
+export function publishRow(
+  events: EventPublisher,
+  row: Pick<OutboxEvent, 'topic' | 'key' | 'payload' | 'traceparent'>,
+): Promise<void> {
+  return withSpan(
+    `outbox.publish ${row.topic}`,
+    {
+      kind: SpanKind.PRODUCER,
+      parent: contextFromTraceparent(row.traceparent),
+      attributes: { 'messaging.system': 'kafka', 'messaging.destination.name': row.topic },
+    },
+    () =>
+      events.publish(row.topic, { key: row.key, payload: row.payload, headers: injectHeaders() }),
+  );
+}
 
 /**
  * Publishes outbox rows to Kafka in insertion order. Delivery is at-least-once: a crash between publish and
@@ -48,7 +67,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
       let error: unknown;
       for (const row of rows) {
         try {
-          await this.events.publish(row.topic, { key: row.key, payload: row.payload });
+          await publishRow(this.events, row);
         } catch (publishError) {
           error = publishError;
           break;

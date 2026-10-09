@@ -84,3 +84,31 @@ describe('refresh cleanup settings', () => {
     ).toThrow(/REFRESH_REVOKED_RETENTION_DAYS must be at least/);
   });
 });
+
+describe('observability settings', () => {
+  it('keeps tracing, metrics and file logs off by default', () => {
+    const env = validateEnv({ APP_ENV: 'dev' });
+
+    expect(env.OTEL_ENABLED).toBe(false);
+    expect(env.METRICS_ENABLED).toBe(false);
+    expect(env.METRICS_HOST).toBe('127.0.0.1');
+    expect(env.METRICS_PORT).toBe(9464);
+    expect(env.LOG_DIR).toBeUndefined();
+    expect(env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://127.0.0.1:4318');
+  });
+
+  it('reads the flags from strings', () => {
+    const env = validateEnv({ APP_ENV: 'dev', OTEL_ENABLED: 'true', METRICS_ENABLED: 'true' });
+
+    expect(env.OTEL_ENABLED).toBe(true);
+    expect(env.METRICS_ENABLED).toBe(true);
+  });
+
+  it.each([
+    ['OTEL_EXPORTER_OTLP_ENDPOINT', 'not a url'],
+    ['METRICS_PORT', '70000'],
+    ['METRICS_PORT', 'abc'],
+  ])('rejects an invalid %s', (name, value) => {
+    expect(() => validateEnv({ APP_ENV: 'dev', [name]: value })).toThrow(name);
+  });
+});

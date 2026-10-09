@@ -4,6 +4,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsUrl,
   Max,
@@ -14,13 +15,14 @@ import {
 import type { ValidationError } from 'class-validator';
 import { validateCronExpression } from 'cron';
 
-import { DEFAULT_DATABASE_URL } from './defaults.js';
+import { DEFAULT_DATABASE_URL, DEFAULT_OTLP_ENDPOINT } from './defaults.js';
 
 const APP_ENVS = ['dev', 'prod'] as const;
 export type AppEnv = (typeof APP_ENVS)[number];
 const MIN_PROD_SECRET_LENGTH = 32;
 const DEFAULT_REDIS_URL = 'redis://localhost:6379';
 const DEV_ACCESS_SECRET = 'dev-only-access-secret-change-me-before-deploying';
+const envBoolean = ({ value }: { value: unknown }): boolean => value === true || value === 'true';
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
 /**
@@ -91,7 +93,7 @@ export class EnvironmentVariables {
   REFRESH_REVOKED_RETENTION_DAYS = 14;
 
   /** Off by default: the app boots without a broker unless this is "true". */
-  @Transform(({ value }: { value: unknown }) => value === true || value === 'true')
+  @Transform(envBoolean)
   @IsBoolean()
   KAFKA_ENABLED = false;
 
@@ -151,6 +153,36 @@ export class EnvironmentVariables {
   @IsInt()
   @Min(100)
   LAG_POLL_MS = 1000;
+
+  /** Off by default: no SDK is loaded and spans are no-ops (docs/adr/0010-opentelemetry-opt-in.md). */
+  @Transform(envBoolean)
+  @IsBoolean()
+  OTEL_ENABLED = false;
+
+  /** OTLP/HTTP base URL of the collector; `/v1/traces` is appended. */
+  @IsUrl({ require_tld: false })
+  OTEL_EXPORTER_OTLP_ENDPOINT = DEFAULT_OTLP_ENDPOINT;
+
+  @Transform(envBoolean)
+  @IsBoolean()
+  METRICS_ENABLED = false;
+
+  /** Loopback by default so /metrics never leaves the machine unless the operator chooses so. */
+  @IsString()
+  @IsNotEmpty()
+  METRICS_HOST = '127.0.0.1';
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(65535)
+  METRICS_PORT = 9464;
+
+  /** When set, pino also writes JSON lines to `<LOG_DIR>/api.log` for the log shipper. */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  LOG_DIR?: string;
 }
 
 function formatErrors(errors: ValidationError[]): string {

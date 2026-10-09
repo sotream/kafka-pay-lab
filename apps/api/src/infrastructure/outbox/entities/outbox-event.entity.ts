@@ -18,6 +18,10 @@ export class OutboxEvent {
   @Column({ type: 'jsonb' })
   payload: object;
 
+  /** W3C `traceparent` of the request that caused the event, so the trace survives the async gap to the relay. */
+  @Column({ type: 'varchar', length: 55, nullable: true })
+  traceparent: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

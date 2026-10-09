@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
+import { join } from 'node:path';
 import { ConfigService } from '@nestjs/config';
+import { trace } from '@opentelemetry/api';
 import { LoggerModule } from 'nestjs-pino';
+import type { TransportMultiOptions, TransportSingleOptions } from 'pino';
 import type { EnvironmentVariables } from '../config/env.validation.js';
 
 // Secrets must never reach log sinks; see docs/adr/0003-pino-logging.md.
@@ -12,10 +15,12 @@ export const REDACTED_PATHS = [
   'req.body.password',
   'req.body.refreshToken',
   'req.body.accessToken',
+  'req.body.cardToken',
   '*.password',
   '*.token',
   '*.accessToken',
   '*.refreshToken',
+  '*.cardToken',
 ];
 
 const REQUEST_ID_HEADER = 'x-request-id';
@@ -26,6 +31,29 @@ const SAFE_REQUEST_ID = /^[\w.-]{1,64}$/;
 export function resolveRequestId(req: IncomingMessage): string {
   const incoming = req.headers[REQUEST_ID_HEADER];
   return typeof incoming === 'string' && SAFE_REQUEST_ID.test(incoming) ? incoming : randomUUID();
+}
+
+/** Correlates every log line with the active trace; empty (and free) when tracing is off. */
+export function traceFields(): { trace_id?: string; span_id?: string } {
+  const span = trace.getActiveSpan()?.spanContext();
+  return span ? { trace_id: span.traceId, span_id: span.spanId } : {};
+}
+
+/** Console output as before; with a log dir the JSON lines are also written to a file for the log shipper. */
+export function buildTransport(
+  isProduction: boolean,
+  logDir: string | undefined,
+): TransportSingleOptions | TransportMultiOptions | undefined {
+  const consoleTarget: TransportSingleOptions = isProduction
+    ? { target: 'pino/file', options: { destination: 1 } }
+    : { target: 'pino-pretty', options: { singleLine: true, colorize: true } };
+  if (!logDir) return isProduction ? undefined : consoleTarget;
+  return {
+    targets: [
+      consoleTarget,
+      { target: 'pino/file', options: { destination: join(logDir, 'api.log'), mkdir: true } },
+    ],
+  };
 }
 
 export const AppLoggerModule = LoggerModule.forRootAsync({
@@ -43,9 +71,8 @@ export const AppLoggerModule = LoggerModule.forRootAsync({
         // Bound to the per-request child logger, so every line logged during a request carries it.
         customProps: (req) => ({ requestId: req.id }),
         redact: { paths: REDACTED_PATHS, censor: '[REDACTED]' },
-        transport: isProduction
-          ? undefined
-          : { target: 'pino-pretty', options: { singleLine: true, colorize: true } },
+        mixin: traceFields,
+        transport: buildTransport(isProduction, config.get('LOG_DIR', { infer: true })),
       },
     };
   },

@@ -22,7 +22,10 @@ export class KafkaEventPublisher implements EventPublisher, OnModuleInit, OnModu
     await this.producer.disconnect();
   }
 
-  async publish<T>(topic: string, { key, payload }: PublishedEvent<T>): Promise<void> {
-    await this.producer.send({ topic, messages: [{ key, value: JSON.stringify(payload) }] });
+  async publish<T>(topic: string, { key, payload, headers }: PublishedEvent<T>): Promise<void> {
+    await this.producer.send({
+      topic,
+      messages: [{ key, value: JSON.stringify(payload), headers }],
+    });
   }
 }

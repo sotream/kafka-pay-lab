@@ -1,10 +1,11 @@
 import { CircuitOpenError } from './circuit-breaker.js';
+import type { ProcessOutcome } from './payment-processor.js';
 import { processWithRetry } from './payment-retry.js';
 import { TransientPspError } from './psp.client.js';
 
 const options = { maxAttempts: 4, retryBaseMs: 1000 };
 
-function setup(process: (id: string) => Promise<unknown>) {
+function setup(process: (id: string) => Promise<ProcessOutcome>) {
   const fail = vi.fn().mockResolvedValue(undefined);
   const sleep = vi.fn().mockResolvedValue(undefined);
   return { deps: { process: vi.fn(process), fail }, fail, sleep };

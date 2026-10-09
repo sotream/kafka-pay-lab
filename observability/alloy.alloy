@@ -1,0 +1,19 @@
+// Service labels equal the OpenTelemetry service names so Tempo's trace-to-logs link can map them.
+// The log line itself keeps trace_id, which Loki's derived field and Tempo's line filter match.
+local.file_match "apps" {
+  path_targets = [
+    {"__path__" = "/var/log/apps/api.log", "service" = "kafka-pay-lab-api"},
+    {"__path__" = "/var/log/apps/psp-sim.log", "service" = "kafka-pay-lab-psp-sim"},
+  ]
+}
+
+loki.source.file "apps" {
+  targets    = local.file_match.apps.targets
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

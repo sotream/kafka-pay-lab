@@ -79,6 +79,24 @@ Open the dashboard and the simulator side by side. "Generate" is the dashboard b
 | 11  | **Kafka down, outbox backlog**   | `docker compose stop kafka`                                    | "Outbox backlog" grows; payments stay `PENDING`; creating payments still works                                                                 | nothing is lost: `docker compose start kafka`, the backlog drains at once and payments complete once the consumer has rejoined (~20 s) |
 | 12  | Force one outcome                | Generate with amount `1051`, `1091`, `1092`, ... (table below) | that exact outcome per payment                                                                                                                 | see below                                                                                                                              |
 
+## Observability
+
+Opt-in and off by default. With three flags in `.env` and one command, one payment shows up in Grafana as
+a single trace (HTTP, outbox, Kafka, consumer, circuit breaker, provider), with its logs, metrics and
+alerts linked.
+
+![One payment as a trace](docs/images/trace-waterfall.png)
+
+```bash
+# .env: OTEL_ENABLED=true  METRICS_ENABLED=true  LOG_DIR=../../.data/logs
+pnpm obs:up            # Collector, Tempo, Prometheus, Loki, Alloy, Grafana on 127.0.0.1
+pnpm dev
+pnpm obs:scenario      # slow, failing and breaker-open traffic so the dashboards fill and alerts fire
+```
+
+Grafana is at <http://127.0.0.1:3001>. Step by step:
+[observability walkthrough](docs/guides/observability-walkthrough.md).
+
 ## Provider simulator
 
 Settings change at runtime on <http://localhost:4100> (or `PUT /sim/state`).
@@ -123,6 +141,8 @@ Consumer group: `kafka-pay-lab-payments`.
 
 All in `.env` (see `.env.example`): `KAFKA_ENABLED`, `PSP_URL`, `PSP_TIMEOUT_MS`, `CB_FAILURE_THRESHOLD`,
 `CB_RESET_TIMEOUT_MS`, `PAYMENT_MAX_ATTEMPTS`, `PAYMENT_RETRY_BASE_MS`, `OUTBOX_POLL_MS`, `LAG_POLL_MS`.
+Observability: `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `METRICS_ENABLED`, `METRICS_HOST`, `METRICS_PORT`,
+`LOG_DIR`, `GRAFANA_PORT`, `GRAFANA_ADMIN_PASSWORD`.
 To speed up experiments try `CB_RESET_TIMEOUT_MS=3000`. The simulator port is `PSP_SIM_PORT` (default 4100).
 
 While the breaker is open the API log shows `Circuit open: holding the current message` once per probe
@@ -135,6 +155,8 @@ apps/api/src/modules/payments/       payments module: controller, outbox use, co
 apps/api/src/infrastructure/outbox/  transactional outbox (entity, service, relay)
 apps/psp-sim/                        provider simulator (API + public/index.html control page)
 apps/web/src/                        dashboard
+observability/                       Collector, Tempo, Prometheus, Loki, Alloy and Grafana config (as code)
+scripts/                             obs-scenario.mjs (traffic), check-provisioning.mjs (CI check)
 docs/superpowers/                    design spec and implementation plan
 docs/starter.md                      the original starter README
 ```
@@ -146,6 +168,7 @@ The starter's `vehicles`, `auth` and `users` modules are kept untouched.
 ```bash
 pnpm lint | typecheck | test | build
 pnpm test:e2e         # needs pnpm infra:up; the payments flow test also needs Kafka
+pnpm obs:up | obs:down | obs:scenario | check:obs
 ```
 
 ## Known limits

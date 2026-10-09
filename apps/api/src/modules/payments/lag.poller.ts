@@ -29,6 +29,7 @@ export function computeLag(
 @Injectable()
 export class LagPoller implements OnApplicationShutdown {
   private admin?: Admin;
+  private connecting?: Promise<Admin>;
 
   constructor(
     @Inject(KAFKA_CLIENT) private readonly kafka: Kafka,
@@ -53,12 +54,19 @@ export class LagPoller implements OnApplicationShutdown {
     await this.admin?.disconnect();
   }
 
-  private async connectedAdmin(): Promise<Admin> {
-    if (!this.admin) {
-      const admin = this.kafka.admin();
-      await admin.connect();
-      this.admin = admin;
-    }
-    return this.admin;
+  /** The pending connect is cached, not only the finished one: scrapes during a broker outage must not each open a new hanging connection. */
+  private connectedAdmin(): Promise<Admin> {
+    this.connecting ??= this.connect().catch((error: unknown) => {
+      this.connecting = undefined;
+      throw error;
+    });
+    return this.connecting;
+  }
+
+  private async connect(): Promise<Admin> {
+    const admin = this.kafka.admin();
+    await admin.connect();
+    this.admin = admin;
+    return admin;
   }
 }

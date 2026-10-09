@@ -1,12 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Registry } from '@prometheus-io/client';
 import type { EnvironmentVariables } from '../../infrastructure/config/env.validation.js';
 import { OutboxModule } from '../../infrastructure/outbox/outbox.module.js';
+import { OutboxService } from '../../infrastructure/outbox/outbox.service.js';
 import { CircuitBreaker } from './circuit-breaker.js';
 import { Payment } from './entities/payment.entity.js';
 import { LagPoller } from './lag.poller.js';
 import { PaymentFeed } from './payment-feed.js';
+import { PaymentMetrics } from './payment-metrics.js';
 import { PaymentProcessor } from './payment-processor.js';
 import { PaymentRequestedConsumer } from './payment-requested.consumer.js';
 import { PAYMENT_BREAKER } from './payments.constants.js';
@@ -29,6 +32,12 @@ type AppConfig = ConfigService<EnvironmentVariables, true>;
     LagPoller,
     StreamService,
     {
+      provide: PaymentMetrics,
+      inject: [Registry, OutboxService, LagPoller],
+      useFactory: (registry: Registry, outbox: OutboxService, lag: LagPoller) =>
+        new PaymentMetrics(registry, { outbox: () => outbox.stats(), lag: () => lag.sample() }),
+    },
+    {
       provide: PspClient,
       inject: [ConfigService],
       useFactory: (config: AppConfig) =>
@@ -39,12 +48,15 @@ type AppConfig = ConfigService<EnvironmentVariables, true>;
     },
     {
       provide: PAYMENT_BREAKER,
-      inject: [ConfigService, PaymentFeed],
-      useFactory: (config: AppConfig, feed: PaymentFeed) =>
+      inject: [ConfigService, PaymentFeed, PaymentMetrics],
+      useFactory: (config: AppConfig, feed: PaymentFeed, metrics: PaymentMetrics) =>
         new CircuitBreaker({
           failureThreshold: config.get('CB_FAILURE_THRESHOLD', { infer: true }),
           resetTimeoutMs: config.get('CB_RESET_TIMEOUT_MS', { infer: true }),
-          onChange: (snapshot) => feed.breaker$.next(snapshot),
+          onChange: (snapshot) => {
+            feed.breaker$.next(snapshot);
+            metrics.breakerChanged(snapshot.state);
+          },
         }),
     },
   ],
