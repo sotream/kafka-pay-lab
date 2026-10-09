@@ -13,6 +13,7 @@ import { validateEnv } from './infrastructure/config/env.validation.js';
 import type { EnvironmentVariables } from './infrastructure/config/env.validation.js';
 import { DatabaseModule } from './infrastructure/database/database.module.js';
 import { AppLoggerModule } from './infrastructure/logging/logging.module.js';
+import { MetricsModule } from './infrastructure/metrics/metrics.module.js';
 import { MessagingModule } from './infrastructure/messaging/messaging.module.js';
 import { OutboxModule } from './infrastructure/outbox/outbox.module.js';
 
@@ -25,6 +26,7 @@ import { OutboxModule } from './infrastructure/outbox/outbox.module.js';
       envFilePath: ['.env', '../../.env'],
     }),
     AppLoggerModule,
+    MetricsModule,
     RedisModule,
     DatabaseModule,
     MessagingModule,

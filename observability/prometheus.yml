@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 5s
+scrape_configs:
+  - job_name: kafka-pay-lab-api
+    # The API runs on the host (pnpm dev); metrics are on its own listener, see METRICS_HOST.
+    static_configs:
+      - targets: ['host.docker.internal:9464']

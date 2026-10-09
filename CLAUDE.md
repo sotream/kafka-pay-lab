@@ -16,6 +16,7 @@ Kafka, Vitest. Web: Next.js App Router, React, Tailwind. Provider simulator: Nes
 pnpm install && pnpm infra:up && pnpm db:migrate && pnpm db:seed && pnpm dev
 pnpm lint | typecheck | test | test:e2e | build     # test:e2e needs pnpm infra:up
 pnpm db:migrate:generate src/infrastructure/database/migrations/<Name>   # path is relative to apps/api
+pnpm obs:up | obs:down | obs:scenario | check:obs   # opt-in Grafana stack, see ADR 0010-0012
 ```
 
 ## Architecture in five lines
@@ -35,6 +36,8 @@ More: [architecture](docs/architecture/overview.md), [ADRs](docs/adr), [guides](
   you changed build-affecting code). Use `/verify`. Do not claim something works without running it.
 - Never read or print `.env` files or secrets. Schema changes only through generated migrations.
 - Conventional Commits, small changes. Do not commit `docs/private/` or `docs/notes/`.
+- New spans and metrics follow ADR 0010 and 0012: no ids or free text in metric labels, nothing
+  sensitive in spans or logs.
 - Comments explain why, not what. Delete unused code. No abstraction without a second use.
 
 ## Where the rules are

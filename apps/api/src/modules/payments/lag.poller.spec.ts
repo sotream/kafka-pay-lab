@@ -1,4 +1,5 @@
-import { computeLag } from './lag.poller.js';
+import type { Kafka } from 'kafkajs';
+import { LagPoller, computeLag } from './lag.poller.js';
 
 describe('computeLag', () => {
   it('is latest offset minus committed offset, per partition and in total', () => {
@@ -35,5 +36,30 @@ describe('computeLag', () => {
     expect(
       computeLag([{ partition: 0, high: '2', low: '0' }], [{ partition: 0, offset: '5' }]).total,
     ).toBe(0);
+  });
+});
+
+describe('LagPoller connection', () => {
+  const config = { get: () => true } as never;
+
+  it('shares one pending connect between concurrent samples while the broker is unreachable', async () => {
+    const admin = vi.fn(() => ({ connect: () => new Promise<void>(() => {}) }));
+    const poller = new LagPoller({ admin } as unknown as Kafka, config);
+
+    void poller.sample();
+    void poller.sample();
+    await Promise.resolve();
+
+    expect(admin).toHaveBeenCalledTimes(1);
+  });
+
+  it('tries again after a failed connect', async () => {
+    const admin = vi.fn(() => ({ connect: () => Promise.reject(new Error('down')) }));
+    const poller = new LagPoller({ admin } as unknown as Kafka, config);
+
+    await expect(poller.sample()).rejects.toThrow('down');
+    await expect(poller.sample()).rejects.toThrow('down');
+
+    expect(admin).toHaveBeenCalledTimes(2);
   });
 });

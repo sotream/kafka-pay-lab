@@ -2,16 +2,20 @@ import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { OutboxService } from '../../infrastructure/outbox/outbox.service.js';
-import { CircuitBreaker } from './circuit-breaker.js';
+import { withSpan } from '../../infrastructure/telemetry/trace-context.js';
+import { CircuitBreaker, CircuitOpenError } from './circuit-breaker.js';
 import { Payment, PaymentStatus } from './entities/payment.entity.js';
 import { PAYMENT_COMPLETED_TOPIC, PAYMENT_DLQ_TOPIC } from './payment-events.js';
 import type { PaymentCompletedEvent, PaymentDlqEvent } from './payment-events.js';
 import { PaymentFeed } from './payment-feed.js';
+import { PaymentMetrics } from './payment-metrics.js';
 import { PAYMENT_BREAKER } from './payments.constants.js';
 import { toPaymentView } from './payment.view.js';
 import { PspClient } from './psp.client.js';
 
 export type ProcessOutcome = 'skipped' | 'completed' | 'declined';
+/** What happened to one message overall: a try's outcome, or `failed` once every retry is spent. */
+export type MessageOutcome = ProcessOutcome | 'failed';
 
 @Injectable()
 export class PaymentProcessor {
@@ -22,6 +26,7 @@ export class PaymentProcessor {
     @Inject(PAYMENT_BREAKER) private readonly breaker: CircuitBreaker,
     private readonly outbox: OutboxService,
     private readonly feed: PaymentFeed,
+    private readonly metrics: PaymentMetrics,
   ) {}
 
   /**
@@ -33,11 +38,28 @@ export class PaymentProcessor {
     // Kafka delivers at least once, so a settled or unknown payment is a duplicate, not an error.
     if (payment?.status !== PaymentStatus.PENDING) return 'skipped';
 
-    const result = await this.breaker.execute(() =>
-      this.psp.charge(
-        { amount: payment.amount, currency: payment.currency, cardToken: payment.cardToken },
-        payment.id,
-      ),
+    const result = await withSpan(
+      'breaker.execute',
+      { attributes: { 'payment.id': payment.id, 'breaker.state': this.breaker.snapshot().state } },
+      async (span) => {
+        try {
+          const charged = await this.breaker.execute(() =>
+            this.psp.charge(
+              { amount: payment.amount, currency: payment.currency, cardToken: payment.cardToken },
+              payment.id,
+            ),
+          );
+          // A decline is a business answer, so the call still counts as passed.
+          span.setAttribute('breaker.outcome', 'passed');
+          return charged;
+        } catch (error) {
+          span.setAttribute(
+            'breaker.outcome',
+            error instanceof CircuitOpenError ? 'rejected' : 'failed',
+          );
+          throw error;
+        }
+      },
     );
     if (result.kind === 'approved') {
       await this.settle(payment, PaymentStatus.COMPLETED, null);
@@ -62,32 +84,38 @@ export class PaymentProcessor {
     reason: string | null,
     deadLetter = false,
   ): Promise<void> {
-    const changed = await this.dataSource.transaction(async (manager) => {
-      const { affected } = await manager.update(
-        Payment,
-        { id: payment.id, status: PaymentStatus.PENDING },
-        { status, declineReason: reason },
-      );
-      if (!affected) return false;
-      const occurredAt = new Date().toISOString();
-      const completed: PaymentCompletedEvent = {
-        paymentId: payment.id,
-        status,
-        declineReason: reason,
-        occurredAt,
-      };
-      await this.outbox.add(manager, PAYMENT_COMPLETED_TOPIC, payment.id, completed);
-      if (deadLetter) {
-        const dead: PaymentDlqEvent = {
-          paymentId: payment.id,
-          reason: reason ?? 'unknown',
-          occurredAt,
-        };
-        await this.outbox.add(manager, PAYMENT_DLQ_TOPIC, payment.id, dead);
-      }
-      return true;
-    });
+    const changed = await withSpan(
+      'payment.settle',
+      { attributes: { 'payment.id': payment.id, 'payment.status': status } },
+      () =>
+        this.dataSource.transaction(async (manager) => {
+          const { affected } = await manager.update(
+            Payment,
+            { id: payment.id, status: PaymentStatus.PENDING },
+            { status, declineReason: reason },
+          );
+          if (!affected) return false;
+          const occurredAt = new Date().toISOString();
+          const completed: PaymentCompletedEvent = {
+            paymentId: payment.id,
+            status,
+            declineReason: reason,
+            occurredAt,
+          };
+          await this.outbox.add(manager, PAYMENT_COMPLETED_TOPIC, payment.id, completed);
+          if (deadLetter) {
+            const dead: PaymentDlqEvent = {
+              paymentId: payment.id,
+              reason: reason ?? 'unknown',
+              occurredAt,
+            };
+            await this.outbox.add(manager, PAYMENT_DLQ_TOPIC, payment.id, dead);
+          }
+          return true;
+        }),
+    );
     if (changed) {
+      if (deadLetter) this.metrics.deadLettered();
       this.feed.payment$.next(
         toPaymentView({ ...payment, status, declineReason: reason, updatedAt: new Date() }),
       );

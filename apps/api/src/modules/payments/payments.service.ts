@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { OutboxService } from '../../infrastructure/outbox/outbox.service.js';
+import { withSpan } from '../../infrastructure/telemetry/trace-context.js';
 import type { CreatePaymentDto, LoadPaymentsDto } from './dto/payment.dto.js';
 import { Payment, PaymentStatus } from './entities/payment.entity.js';
 import { PAYMENT_REQUESTED_TOPIC } from './payment-events.js';
@@ -27,26 +28,29 @@ export class PaymentsService {
 
   /** Payment row and outbox row commit together; Kafka is the relay's problem, not the request's. */
   async create(dto: CreatePaymentDto): Promise<Payment> {
-    const payment = await this.dataSource.transaction(async (manager) => {
-      const saved = await manager.save(
-        manager.create(Payment, {
-          amount: dto.amount,
-          currency: dto.currency,
-          cardToken: dto.cardToken,
-          status: PaymentStatus.PENDING,
-        }),
-      );
-      const event: PaymentRequestedEvent = {
-        paymentId: saved.id,
-        amount: saved.amount,
-        currency: saved.currency,
-        occurredAt: new Date().toISOString(),
-      };
-      await this.outbox.add(manager, PAYMENT_REQUESTED_TOPIC, saved.id, event);
-      return saved;
+    return withSpan('payment.create', {}, async (span) => {
+      const payment = await this.dataSource.transaction(async (manager) => {
+        const saved = await manager.save(
+          manager.create(Payment, {
+            amount: dto.amount,
+            currency: dto.currency,
+            cardToken: dto.cardToken,
+            status: PaymentStatus.PENDING,
+          }),
+        );
+        const event: PaymentRequestedEvent = {
+          paymentId: saved.id,
+          amount: saved.amount,
+          currency: saved.currency,
+          occurredAt: new Date().toISOString(),
+        };
+        await this.outbox.add(manager, PAYMENT_REQUESTED_TOPIC, saved.id, event);
+        return saved;
+      });
+      span.setAttribute('payment.id', payment.id);
+      this.feed.payment$.next(toPaymentView(payment));
+      return payment;
     });
-    this.feed.payment$.next(toPaymentView(payment));
-    return payment;
   }
 
   recent(limit = 50): Promise<Payment[]> {

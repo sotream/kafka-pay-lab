@@ -25,3 +25,5 @@ through request headers and bodies.
 - Request bodies are not logged by default, which is the safest default.
 - `kafkajs` logs through its own JSON logger rather than pino, so its lines do not carry the request id
   or go through pino redaction.
+- Log lines carry `trace_id` and `span_id` when tracing is on and can be written to a file for a log
+  shipper; see [ADR 0010](0010-opentelemetry-opt-in.md) and [ADR 0012](0012-grafana-stack.md).

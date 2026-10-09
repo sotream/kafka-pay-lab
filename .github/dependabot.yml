@@ -32,3 +32,8 @@ updates:
     ignore:
       - dependency-name: node
         update-types: ['version-update:semver-major']
+  # Observability images in docker-compose.yml (pinned by digest; Dependabot moves tag and digest together).
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly

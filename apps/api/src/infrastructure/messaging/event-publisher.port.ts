@@ -4,6 +4,8 @@ export interface PublishedEvent<T> {
   /** Routing key: events with the same key keep their order. */
   key: string;
   payload: T;
+  /** Transport headers (W3C trace context); the broker adapter forwards them, the no-op one ignores them. */
+  headers?: Record<string, string>;
 }
 
 /**

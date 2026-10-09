@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { trace } from '@opentelemetry/api';
 import { Body, Controller, Headers, Post, Req, Res } from '@nestjs/common';
 import { IsIn, IsInt, IsString, Length, Max, Min } from 'class-validator';
 import type { Request, Response } from 'express';
+import { logLine } from './json-log.js';
 import { resolveScenario } from './scenario.js';
 import { SimService } from './sim.service.js';
 import type { LogEntry } from './sim.service.js';
@@ -29,7 +31,7 @@ export class ChargesController {
       res.status(400).json({ error: 'Idempotency-Key header is required' });
       return;
     }
-    const entry = (outcome: string, latencyMs: number, source: LogEntry['source']): void =>
+    const entry = (outcome: string, latencyMs: number, source: LogEntry['source']): void => {
       this.sim.record({
         at: new Date().toISOString(),
         key,
@@ -38,6 +40,17 @@ export class ChargesController {
         outcome,
         source,
       });
+      const span = trace.getActiveSpan()?.spanContext();
+      // The card token and amount stay out of the log; the key is the payment id.
+      logLine(process.env.LOG_DIR, {
+        msg: 'charge',
+        level: 'info',
+        idempotency_key: key,
+        outcome,
+        latency_ms: latencyMs,
+        ...(span && { trace_id: span.traceId, span_id: span.spanId }),
+      });
+    };
 
     // A retry that arrives while the first call is still running waits for it, then gets its result.
     await this.sim.settled(key);
@@ -64,6 +77,7 @@ export class ChargesController {
     entry: (outcome: string, latencyMs: number, source: LogEntry['source']) => void,
   ): Promise<void> {
     const { latencyMs, outcome, source } = resolveScenario(this.sim.getState(), dto.amount);
+    trace.getActiveSpan()?.setAttributes({ 'psp.outcome': outcome.kind, 'psp.source': source });
     await sleep(latencyMs);
 
     switch (outcome.kind) {
