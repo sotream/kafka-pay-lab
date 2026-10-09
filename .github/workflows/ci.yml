@@ -57,11 +57,13 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 3s --health-retries 10
       # The image's default config is a single-node KRaft broker on localhost:9092, which the payments flow e2e uses.
+      # Healthy means topics can be created and the group coordinator answers, not only that the port is open:
+      # on a cold runner the coordinator is still starting and the consumer crashes on bootstrap.
       kafka:
         image: apache/kafka:4.3.1@sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837
         ports: ['9092:9092']
         options: >-
-          --health-cmd "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"
+          --health-cmd "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic ci-ready && /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group ci-ready"
           --health-interval 10s --health-timeout 10s --health-retries 10 --health-start-period 15s
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

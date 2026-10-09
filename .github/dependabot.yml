@@ -37,3 +37,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Tempo 3 is a new architecture with a different config; move to it deliberately, not by bot.
+    ignore:
+      - dependency-name: grafana/tempo
+        update-types: ['version-update:semver-major']
