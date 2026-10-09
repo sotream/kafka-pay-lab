@@ -1,5 +1,7 @@
 # kafka-pay-lab
 
+[![CI](https://github.com/sotream/kafka-pay-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/sotream/kafka-pay-lab/actions/workflows/ci.yml)
+
 A local lab for **watching Kafka work**. A small payments service sends payments through Kafka to a
 simulated payment provider that you can make slow, make refuse payments, or knock over completely. You
 see the effects live: consumer lag grows and drains, a circuit breaker opens and recovers, failed
