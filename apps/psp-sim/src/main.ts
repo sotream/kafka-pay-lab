@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { initLog } from './json-log.js';
 import { startTracing } from './telemetry/tracing.js';
 
 /** Same root `.env` as the api, so OTEL_ENABLED and LOG_DIR apply to both. Existing variables win. */
@@ -13,6 +14,7 @@ function loadRootEnv(): void {
 
 async function bootstrap(): Promise<void> {
   loadRootEnv();
+  await initLog(process.env.LOG_DIR, process.env.LOG_ROLL_SIZE);
   // Only the charge calls are worth a trace; the control page and its event stream are noise.
   await startTracing('kafka-pay-lab-psp-sim', (url) => !url.startsWith('/charges'));
   // Imported only now, after the HTTP instrumentation had its chance to patch node:http.

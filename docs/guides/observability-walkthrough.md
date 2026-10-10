@@ -61,7 +61,7 @@ Grafana, Explore, data source Tempo. Run this TraceQL query and open a trace:
 That finds payments that used all four tries. The waterfall shows:
 
 ```
-POST  (url.path=/api/v1/payments)              api (http server)
+POST /api/v1/payments                         api (http server)
   payment.create            payment.id
     outbox.add                                  traceparent saved on the row
       outbox.publish payments.requested         relay, seconds later, same trace
@@ -110,7 +110,9 @@ curl -sG http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'query={
 - Prometheus target down: check `METRICS_ENABLED=true` and, on Linux, `METRICS_HOST`.
 - No traces: check `OTEL_ENABLED=true` and that port `4318` answers on `127.0.0.1`. A stopped Collector
   never slows or fails payments; spans are just dropped.
-- No logs: check `LOG_DIR` and that `.data/logs/api.log` appears (`pnpm obs:up` creates the folder).
+- No logs: check `LOG_DIR` and that `.data/logs/api.<n>.log` appears (`pnpm obs:up` creates the folder).
+  Files roll daily and at `LOG_ROLL_SIZE` (default 10 MB) and the five newest are kept, so the folder
+  stays bounded; Alloy reads each new file from its start ([ADR 0013](../adr/0013-log-file-rotation.md)).
 - Turn it all off by removing the three flags. `pnpm infra:up` never starts this stack.
 
 ## What is not included

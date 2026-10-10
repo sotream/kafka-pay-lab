@@ -6,7 +6,8 @@
     "METRICS_ENABLED",
     "METRICS_HOST",
     "METRICS_PORT",
-    "LOG_DIR"
+    "LOG_DIR",
+    "LOG_ROLL_SIZE"
   ],
   "tasks": {
     "build": {

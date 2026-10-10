@@ -1,20 +1,39 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { logLine } from './json-log.js';
+import { closeLog, initLog, logLine, rollOptions } from './json-log.js';
+
+describe('rollOptions', () => {
+  it('rolls daily and at the given size into <dir>/psp-sim.<n>.log, keeping a bounded number', () => {
+    expect(rollOptions('/var/logs', '5m')).toEqual({
+      file: '/var/logs/psp-sim',
+      extension: '.log',
+      frequency: 'daily',
+      size: '5m',
+      limit: { count: 5 },
+      mkdir: true,
+    });
+  });
+});
 
 describe('logLine', () => {
-  it('does nothing without a log dir', () => {
-    expect(() => logLine(undefined, { msg: 'x' })).not.toThrow();
+  afterEach(() => closeLog());
+
+  it('does nothing before the log is initialised', () => {
+    expect(() => logLine({ msg: 'x' })).not.toThrow();
   });
 
-  it('appends one JSON line per call with the service name and a timestamp', () => {
+  it('appends one JSON line per call with the service name and a timestamp', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'psp-sim-log-'));
+    await initLog(dir, '10m');
 
-    logLine(dir, { msg: 'charge', outcome: 'approved' });
-    logLine(dir, { msg: 'charge', outcome: 'http503' });
+    logLine({ msg: 'charge', outcome: 'approved' });
+    logLine({ msg: 'charge', outcome: 'http503' });
+    await closeLog();
 
-    const lines = readFileSync(join(dir, 'psp-sim.log'), 'utf8')
+    const [file] = readdirSync(dir);
+    expect(file).toMatch(/^psp-sim\.\d+\.log$/);
+    const lines = readFileSync(join(dir, file ?? ''), 'utf8')
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as Record<string, unknown>);

@@ -1,4 +1,18 @@
+import type { HttpInstrumentationConfig } from '@opentelemetry/instrumentation-http';
+
 const DEFAULT_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+
+interface RoutedRequest {
+  method?: string;
+  baseUrl?: string;
+  route?: { path?: unknown };
+}
+
+/** `METHOD /route/:template`; a copy of the api's helper (docs/adr/0010-opentelemetry-opt-in.md). */
+export function serverSpanName(req: RoutedRequest): string {
+  const route = req.route ? `${req.baseUrl ?? ''}${String(req.route.path)}` : 'unmatched';
+  return `${req.method ?? 'HTTP'} ${route}`;
+}
 
 /**
  * Starts the OpenTelemetry SDK when OTEL_ENABLED=true; otherwise returns at once and no SDK package is
@@ -40,7 +54,11 @@ export async function startTracing(
     instrumentations: [
       new HttpInstrumentation({
         ignoreIncomingRequestHook: (req) => ignoreIncomingRequest(req.url ?? ''),
-      }),
+        // Runs when the response ends, after Express matched a route.
+        applyCustomAttributesOnSpan: (span, request) => {
+          span.updateName(serverSpanName(request as RoutedRequest));
+        },
+      } satisfies HttpInstrumentationConfig),
     ],
   });
 }

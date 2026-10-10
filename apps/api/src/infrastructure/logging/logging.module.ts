@@ -39,10 +39,17 @@ export function traceFields(): { trace_id?: string; span_id?: string } {
   return span ? { trace_id: span.traceId, span_id: span.spanId } : {};
 }
 
-/** Console output as before; with a log dir the JSON lines are also written to a file for the log shipper. */
+/** Files kept besides the current one; with the default size this bounds the log folder at about 60 MB. */
+const LOG_FILES_KEPT = 5;
+
+/**
+ * Console output as before; with a log dir the JSON lines are also written to rolling files for the log
+ * shipper (`<dir>/api.<n>.log`, new number on every roll, oldest deleted). Rolls daily and at `rollSize`.
+ */
 export function buildTransport(
   isProduction: boolean,
   logDir: string | undefined,
+  rollSize = '10m',
 ): TransportSingleOptions | TransportMultiOptions | undefined {
   const consoleTarget: TransportSingleOptions = isProduction
     ? { target: 'pino/file', options: { destination: 1 } }
@@ -51,7 +58,17 @@ export function buildTransport(
   return {
     targets: [
       consoleTarget,
-      { target: 'pino/file', options: { destination: join(logDir, 'api.log'), mkdir: true } },
+      {
+        target: 'pino-roll',
+        options: {
+          file: join(logDir, 'api'),
+          extension: '.log',
+          frequency: 'daily',
+          size: rollSize,
+          limit: { count: LOG_FILES_KEPT },
+          mkdir: true,
+        },
+      },
     ],
   };
 }
@@ -72,7 +89,11 @@ export const AppLoggerModule = LoggerModule.forRootAsync({
         customProps: (req) => ({ requestId: req.id }),
         redact: { paths: REDACTED_PATHS, censor: '[REDACTED]' },
         mixin: traceFields,
-        transport: buildTransport(isProduction, config.get('LOG_DIR', { infer: true })),
+        transport: buildTransport(
+          isProduction,
+          config.get('LOG_DIR', { infer: true }),
+          config.get('LOG_ROLL_SIZE', { infer: true }),
+        ),
       },
     };
   },

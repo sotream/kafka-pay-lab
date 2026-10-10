@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { parseEnv } from 'node:util';
+import type { HttpInstrumentationConfig } from '@opentelemetry/instrumentation-http';
 import { DEFAULT_OTLP_ENDPOINT } from '../config/defaults.js';
 
 const TRACING_KEYS = ['OTEL_ENABLED', 'OTEL_EXPORTER_OTLP_ENDPOINT'];
@@ -22,6 +23,35 @@ export function loadTracingEnv(files: string[] = ['.env', '../../.env']): void {
         process.env[key] = parsed[key];
     }
   }
+}
+
+interface RoutedRequest {
+  method?: string;
+  baseUrl?: string;
+  route?: { path?: unknown };
+}
+
+/**
+ * `METHOD /route/:template` for server spans. The route is only known once Express has matched it, so
+ * this runs when the response ends. The template, never the URL: ids in span names would make every
+ * payment its own operation in Tempo. No matched route collapses into one fixed word.
+ */
+export function serverSpanName(req: RoutedRequest): string {
+  const route = req.route ? `${req.baseUrl ?? ''}${String(req.route.path)}` : 'unmatched';
+  return `${req.method ?? 'HTTP'} ${route}`;
+}
+
+/** Shared by startTracing and the trace e2e test, so the test exercises the real naming hook. */
+export function httpInstrumentationConfig(
+  ignoreIncomingRequest: (url: string) => boolean,
+): HttpInstrumentationConfig {
+  return {
+    ignoreIncomingRequestHook: (req) => ignoreIncomingRequest(req.url ?? ''),
+    // Runs when the response ends, after Express matched a route; the request then carries `route`.
+    applyCustomAttributesOnSpan: (span, request) => {
+      span.updateName(serverSpanName(request as RoutedRequest));
+    },
+  };
 }
 
 /**
@@ -65,9 +95,7 @@ export async function startTracing(
   provider.register();
   registerInstrumentations({
     instrumentations: [
-      new HttpInstrumentation({
-        ignoreIncomingRequestHook: (req) => ignoreIncomingRequest(req.url ?? ''),
-      }),
+      new HttpInstrumentation(httpInstrumentationConfig(ignoreIncomingRequest)),
       // Node's fetch (PspClient) goes through undici, not node:http.
       new UndiciInstrumentation(),
     ],

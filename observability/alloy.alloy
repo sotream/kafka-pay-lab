@@ -1,9 +1,11 @@
+// pino-roll never renames a file: every roll starts a new `<name>.<n>.log`, so each file is read once
+// from its start and nothing is ingested twice. The glob picks up new files and drops deleted ones.
 // Service labels equal the OpenTelemetry service names so Tempo's trace-to-logs link can map them.
 // The log line itself keeps trace_id, which Loki's derived field and Tempo's line filter match.
 local.file_match "apps" {
   path_targets = [
-    {"__path__" = "/var/log/apps/api.log", "service" = "kafka-pay-lab-api"},
-    {"__path__" = "/var/log/apps/psp-sim.log", "service" = "kafka-pay-lab-psp-sim"},
+    {"__path__" = "/var/log/apps/api.*.log", "service" = "kafka-pay-lab-api"},
+    {"__path__" = "/var/log/apps/psp-sim.*.log", "service" = "kafka-pay-lab-psp-sim"},
   ]
 }
 

@@ -68,13 +68,30 @@ describe('log transport', () => {
     expect(buildTransport(true, undefined)).toBeUndefined();
   });
 
-  it('also writes JSON lines to <dir>/api.log when a log dir is set', () => {
-    expect(buildTransport(true, '/var/logs')).toEqual({
+  it('also writes JSON lines to rolling files <dir>/api.<n>.log when a log dir is set', () => {
+    expect(buildTransport(true, '/var/logs', '5m')).toEqual({
       targets: [
         { target: 'pino/file', options: { destination: 1 } },
-        { target: 'pino/file', options: { destination: '/var/logs/api.log', mkdir: true } },
+        {
+          target: 'pino-roll',
+          options: {
+            file: '/var/logs/api',
+            extension: '.log',
+            frequency: 'daily',
+            size: '5m',
+            limit: { count: 5 },
+            mkdir: true,
+          },
+        },
       ],
     });
+  });
+
+  it('rolls at 10 MB by default and keeps a bounded number of files', () => {
+    const transport = buildTransport(true, '/var/logs');
+
+    expect(JSON.stringify(transport)).toContain('"size":"10m"');
+    expect(JSON.stringify(transport)).toContain('"limit":{"count":5}');
   });
 
   it.each(['*.cardToken', 'req.body.cardToken'])('redacts %s', (path) => {

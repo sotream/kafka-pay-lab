@@ -14,7 +14,7 @@ what `pnpm infra:up` starts and without turning a learning repository into a pro
   Prometheus, Loki, Alloy and Grafana, all provisioned from `observability/`. Every image is pinned by
   digest and Dependabot's `docker-compose` ecosystem tracks them. Every published port binds `127.0.0.1`.
 - The Collector is the single place apps send traces to, and where sampling or redaction would go later.
-- Logs are JSON files written to `LOG_DIR` and tailed by Alloy. The apps run on the host, so there is no
+- Logs are JSON files written to `LOG_DIR` (rolling, see [ADR 0013](0013-log-file-rotation.md)) and tailed by Alloy. The apps run on the host, so there is no
   container stdout to collect, and this path works with tracing off. Alloy is used instead of Promtail,
   which is deprecated. Loki labels are only `service`; `trace_id` stays in the line, where Loki's derived
   field and Tempo's trace-to-logs link find it.
