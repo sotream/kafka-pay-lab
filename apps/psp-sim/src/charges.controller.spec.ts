@@ -31,7 +31,7 @@ describe('psp-sim HTTP', () => {
   it('approves a charge', async () => {
     const res = await http()
       .post('/charges')
-      .set('Idempotency-Key', 'k1')
+      .set('Idempotency-Key', '"k1"')
       .send(body(1000))
       .expect(200);
 
@@ -45,10 +45,37 @@ describe('psp-sim HTTP', () => {
     await http().post('/charges').send(body(1000)).expect(400);
   });
 
+  it.each(['plain', '"unterminated', "'single'", '""', '"a" "b"'])(
+    'rejects the key %s: it must be a quoted structured field string',
+    async (key) => {
+      await http().post('/charges').set('Idempotency-Key', key).send(body(1000)).expect(400);
+    },
+  );
+
+  it('accepts a key with escaped quotes and backslashes', async () => {
+    await http()
+      .post('/charges')
+      .set('Idempotency-Key', '"a\\"b\\\\c"')
+      .send(body(1000))
+      .expect(200);
+  });
+
+  it('answers 422 without a decline code when a key is reused with another payload', async () => {
+    await http().post('/charges').set('Idempotency-Key', '"reuse"').send(body(1000)).expect(200);
+
+    const reused = await http()
+      .post('/charges')
+      .set('Idempotency-Key', '"reuse"')
+      .send(body(2000))
+      .expect(422);
+
+    expect(reused.body).toEqual({ error: 'idempotency_key_reused' });
+  });
+
   it('returns the stored result for a repeated idempotency key (duplicate delivery)', async () => {
     const first = await http()
       .post('/charges')
-      .set('Idempotency-Key', 'dup')
+      .set('Idempotency-Key', '"dup"')
       .send(body(1000))
       .expect(200);
 
@@ -58,7 +85,7 @@ describe('psp-sim HTTP', () => {
       .expect(200);
     const second = await http()
       .post('/charges')
-      .set('Idempotency-Key', 'dup')
+      .set('Idempotency-Key', '"dup"')
       .send(body(1000))
       .expect(200);
 
@@ -68,7 +95,7 @@ describe('psp-sim HTTP', () => {
   it('declines a magic amount with 402 and the reason code', async () => {
     await http()
       .post('/charges')
-      .set('Idempotency-Key', 'k2')
+      .set('Idempotency-Key', '"k2"')
       .send(body(1051))
       .expect(402, { code: 'insufficient_funds' });
   });
@@ -79,7 +106,7 @@ describe('psp-sim HTTP', () => {
       .send({ ...fast, outage: 'http503' })
       .expect(200);
 
-    await http().post('/charges').set('Idempotency-Key', 'k3').send(body(1000)).expect(503);
+    await http().post('/charges').set('Idempotency-Key', '"k3"').send(body(1000)).expect(503);
   });
 
   it('drops the connection during a reset outage', async () => {
@@ -89,7 +116,7 @@ describe('psp-sim HTTP', () => {
       .expect(200);
 
     await expect(
-      http().post('/charges').set('Idempotency-Key', 'k4').send(body(1000)),
+      http().post('/charges').set('Idempotency-Key', '"k4"').send(body(1000)),
     ).rejects.toThrow();
   });
 
@@ -103,6 +130,6 @@ describe('psp-sim HTTP', () => {
   });
 
   it('rejects a charge with a bad amount', async () => {
-    await http().post('/charges').set('Idempotency-Key', 'k5').send(body(0)).expect(400);
+    await http().post('/charges').set('Idempotency-Key', '"k5"').send(body(0)).expect(400);
   });
 });

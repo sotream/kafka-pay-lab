@@ -19,6 +19,7 @@ describe('PaymentMetrics', () => {
       'payments_breaker_transitions_total',
       'payments_consumer_lag',
       'payments_dlq_total',
+      'payments_idempotent_replays_total',
       'payments_processing_duration_seconds',
       'payments_retries_total',
     ]);

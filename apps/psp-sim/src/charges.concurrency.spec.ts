@@ -33,7 +33,7 @@ describe('psp-sim concurrency', () => {
   it('releases a hung request as soon as the client gives up', async () => {
     const req = httpRequest(`${url()}/charges`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': 'hang-1' },
+      headers: { 'content-type': 'application/json', 'idempotency-key': '"hang-1"' },
     });
     req.on('error', () => undefined);
     req.end(JSON.stringify(body(1092)));
@@ -47,7 +47,10 @@ describe('psp-sim concurrency', () => {
   it('answers a retry that arrives while the first call is still in flight with the same charge', async () => {
     sim.setState({ ...DEFAULT_STATE, latencyMs: 300, jitterMs: 0 });
     const post = () =>
-      request(app.getHttpServer()).post('/charges').set('Idempotency-Key', 'slow').send(body(1000));
+      request(app.getHttpServer())
+        .post('/charges')
+        .set('Idempotency-Key', '"slow"')
+        .send(body(1000));
 
     const [first, second] = await Promise.all([post(), post()]);
 

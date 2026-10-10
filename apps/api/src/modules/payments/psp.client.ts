@@ -43,7 +43,7 @@ export class PspClient {
     try {
       const response = await fetch(`${this.options.baseUrl}/charges`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
+        headers: { 'content-type': 'application/json', 'idempotency-key': `"${idempotencyKey}"` },
         body: JSON.stringify(request),
         signal: AbortSignal.timeout(this.options.timeoutMs),
       });

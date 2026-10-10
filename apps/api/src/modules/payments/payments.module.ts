@@ -8,6 +8,7 @@ import { OutboxService } from '../../infrastructure/outbox/outbox.service.js';
 import { CircuitBreaker } from './circuit-breaker.js';
 import { Payment } from './entities/payment.entity.js';
 import { LagPoller } from './lag.poller.js';
+import { LoadJobs } from './load-jobs.js';
 import { PaymentFeed } from './payment-feed.js';
 import { PaymentMetrics } from './payment-metrics.js';
 import { PaymentProcessor } from './payment-processor.js';
@@ -26,6 +27,7 @@ type AppConfig = ConfigService<EnvironmentVariables, true>;
   controllers: [PaymentsController, StreamController],
   providers: [
     PaymentsService,
+    { provide: LoadJobs, useFactory: () => new LoadJobs() },
     PaymentFeed,
     PaymentProcessor,
     PaymentRequestedConsumer,

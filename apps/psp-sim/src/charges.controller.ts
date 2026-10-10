@@ -1,8 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { trace } from '@opentelemetry/api';
 import { Body, Controller, Headers, Post, Req, Res } from '@nestjs/common';
 import { IsIn, IsInt, IsString, Length, Max, Min } from 'class-validator';
 import type { Request, Response } from 'express';
+import { parseIdempotencyKey } from './idempotency-key.js';
 import { logLine } from './json-log.js';
 import { resolveScenario } from './scenario.js';
 import { SimService } from './sim.service.js';
@@ -22,15 +23,26 @@ export class ChargesController {
 
   @Post()
   async charge(
-    @Headers('idempotency-key') key: string | undefined,
+    @Headers('idempotency-key') rawKey: string | undefined,
     @Body() dto: ChargeDto,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    if (!key) {
+    if (!rawKey) {
       res.status(400).json({ error: 'Idempotency-Key header is required' });
       return;
     }
+    const key = parseIdempotencyKey(rawKey);
+    if (!key) {
+      res
+        .status(400)
+        .json({ error: 'Idempotency-Key must be a quoted string of 1-255 characters' });
+      return;
+    }
+    // Same key with another body is a client bug, not a retry: never replay a different charge's result.
+    const fingerprint = createHash('sha256')
+      .update(JSON.stringify([dto.amount, dto.currency, dto.cardToken]))
+      .digest('hex');
     const entry = (outcome: string, latencyMs: number, source: LogEntry['source']): void => {
       this.sim.record({
         at: new Date().toISOString(),
@@ -55,6 +67,11 @@ export class ChargesController {
     // A retry that arrives while the first call is still running waits for it, then gets its result.
     await this.sim.settled(key);
     const stored = this.sim.replay(key);
+    if (stored && stored.fingerprint !== fingerprint) {
+      entry('key_reused', 0, 'idempotent-replay');
+      res.status(422).json({ error: 'idempotency_key_reused' });
+      return;
+    }
     if (stored) {
       entry('replayed', 0, 'idempotent-replay');
       res.status(stored.status).json(stored.body);
@@ -63,7 +80,7 @@ export class ChargesController {
 
     const release = this.sim.claim(key);
     try {
-      await this.answer(key, dto, req, res, entry);
+      await this.answer(key, fingerprint, dto, req, res, entry);
     } finally {
       release();
     }
@@ -71,6 +88,7 @@ export class ChargesController {
 
   private async answer(
     key: string,
+    fingerprint: string,
     dto: ChargeDto,
     req: Request,
     res: Response,
@@ -83,14 +101,14 @@ export class ChargesController {
     switch (outcome.kind) {
       case 'approve': {
         const body = { chargeId: `ch_${randomUUID()}`, status: 'approved' };
-        this.sim.store(key, { status: 200, body });
+        this.sim.store(key, { status: 200, body, fingerprint });
         entry('approved', latencyMs, source);
         res.status(200).json(body);
         return;
       }
       case 'decline': {
         const body = { code: outcome.code };
-        this.sim.store(key, { status: 402, body });
+        this.sim.store(key, { status: 402, body, fingerprint });
         entry(`declined:${outcome.code}`, latencyMs, source);
         res.status(402).json(body);
         return;
