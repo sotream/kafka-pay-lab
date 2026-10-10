@@ -29,6 +29,7 @@ export interface MetricSources {
 export class PaymentMetrics {
   private readonly retries: Counter;
   private readonly dlq: Counter;
+  private readonly replays: Counter;
   private readonly duration: Histogram<'outcome'>;
   private readonly transitions: Counter<'from' | 'to'>;
   private readonly breakerState: Gauge<'state'>;
@@ -47,6 +48,11 @@ export class PaymentMetrics {
     this.dlq = new Counter({
       name: 'payments_dlq_total',
       help: 'Payments sent to the dead-letter topic',
+      registers: [registry],
+    });
+    this.replays = new Counter({
+      name: 'payments_idempotent_replays_total',
+      help: 'POST /payments requests answered from a stored payment because the Idempotency-Key was seen',
       registers: [registry],
     });
     this.duration = new Histogram({
@@ -120,6 +126,10 @@ export class PaymentMetrics {
 
   retried(): void {
     this.retries.inc();
+  }
+
+  idempotentReplay(): void {
+    this.replays.inc();
   }
 
   deadLettered(): void {

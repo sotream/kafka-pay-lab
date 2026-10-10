@@ -16,6 +16,8 @@ function pending(overrides: Partial<Payment> = {}): Payment {
     cardToken: 'tok',
     status: PaymentStatus.PENDING,
     declineReason: null,
+    idempotencyKey: null,
+    requestFingerprint: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
     ...overrides,

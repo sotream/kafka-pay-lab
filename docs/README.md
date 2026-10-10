@@ -19,6 +19,7 @@
 |              | [0012 Grafana stack](adr/0012-grafana-stack.md)                                   |
 |              | [0013 Rolling log files](adr/0013-log-file-rotation.md)                           |
 |              | [0014 Outbox retention](adr/0014-outbox-retention.md)                             |
+|              | [0015 Client idempotency keys](adr/0015-client-idempotency-keys.md)               |
 | Guides       | [Getting started](guides/getting-started.md)                                      |
 |              | [Database and migrations](guides/database-and-migrations.md)                      |
 |              | [Authentication](guides/authentication.md)                                        |

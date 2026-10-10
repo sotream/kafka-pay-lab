@@ -24,6 +24,8 @@ export type SimEvent =
 interface StoredCharge {
   status: number;
   body: object;
+  /** Hash of the charge request, to tell a retry from a reused key. */
+  fingerprint: string;
 }
 
 const LOG_LIMIT = 100;

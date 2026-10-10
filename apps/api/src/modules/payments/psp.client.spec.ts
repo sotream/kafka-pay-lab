@@ -22,7 +22,7 @@ describe('PspClient', () => {
 
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('http://psp.test/charges');
-    expect(new Headers(init.headers).get('idempotency-key')).toBe('pay-1');
+    expect(new Headers(init.headers).get('idempotency-key')).toBe('"pay-1"');
     expect(JSON.parse(init.body)).toEqual(request);
   });
 
@@ -42,6 +42,8 @@ describe('PspClient', () => {
     ['200 without a charge id', () => json(200, { status: 'approved' })],
     ['402 with an unknown code', () => json(402, { code: 'made_up' })],
     ['402 with an empty body', () => new Response('', { status: 402 })],
+    // The simulator's answer to a reused key: a client bug, never a card decline.
+    ['422 for a reused idempotency key', () => json(422, { error: 'idempotency_key_reused' })],
   ])('treats %s as transient, never as approved or declined', async (_name, respond) => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(respond()));
 
