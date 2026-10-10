@@ -34,4 +34,7 @@ learning repository must still start with nothing extra running.
   on a hard stop. Production would sample in the Collector.
 - Two copies of the bootstrap must be kept in step.
 - A new pipeline stage needs a hand-written span; it is not picked up automatically.
+- Server spans are named `METHOD /route/:template` (for example `POST /api/v1/payments`, `POST /charges`),
+  set when the response ends and Express has matched the route; an unmatched request is `METHOD unmatched`.
+  Never the URL: ids would make every payment its own operation. Outgoing `fetch` spans stay `POST`.
 - Declines are not span errors (they are a business answer); open circuits and provider failures are.

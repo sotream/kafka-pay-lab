@@ -4,6 +4,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
+import { httpInstrumentationConfig } from '../src/infrastructure/telemetry/tracing.js';
 import { setupTestTracing } from './helpers/tracing.js';
 import type { TestApp } from './helpers/test-app.js';
 
@@ -21,7 +22,12 @@ describe('trace propagation through the outbox and Kafka (e2e)', () => {
     // Registered before express and supertest are imported below, so node:http is patched in time.
     // Outgoing requests are ignored: the test client must not replace the traceparent header we send.
     registerInstrumentations({
-      instrumentations: [new HttpInstrumentation({ ignoreOutgoingRequestHook: () => true })],
+      instrumentations: [
+        new HttpInstrumentation({
+          ...httpInstrumentationConfig(() => false),
+          ignoreOutgoingRequestHook: () => true,
+        }),
+      ],
     });
     provider = createServer((req, res) => {
       req.resume();
@@ -73,6 +79,7 @@ describe('trace propagation through the outbox and Kafka (e2e)', () => {
     const spans = ours();
     const byName = (name: string) => spans.filter((s) => s.name === name);
     for (const name of [
+      'POST /api/v1/payments',
       'payment.create',
       'outbox.add',
       'outbox.publish payments.requested',

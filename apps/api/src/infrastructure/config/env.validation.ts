@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MinLength,
   Min,
@@ -183,6 +184,10 @@ export class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   LOG_DIR?: string;
+
+  /** Size at which a log file rolls (pino-roll syntax: a number and k, m or g). Five files are kept. */
+  @Matches(/^\d+[kmg]$/)
+  LOG_ROLL_SIZE = '10m';
 }
 
 function formatErrors(errors: ValidationError[]): string {

@@ -17,6 +17,7 @@
 |              | [0010 OpenTelemetry, opt-in](adr/0010-opentelemetry-opt-in.md)                    |
 |              | [0011 Trace context via outbox and Kafka](adr/0011-trace-context-outbox-kafka.md) |
 |              | [0012 Grafana stack](adr/0012-grafana-stack.md)                                   |
+|              | [0013 Rolling log files](adr/0013-log-file-rotation.md)                           |
 | Guides       | [Getting started](guides/getting-started.md)                                      |
 |              | [Database and migrations](guides/database-and-migrations.md)                      |
 |              | [Authentication](guides/authentication.md)                                        |

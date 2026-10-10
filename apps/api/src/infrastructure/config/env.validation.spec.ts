@@ -94,6 +94,7 @@ describe('observability settings', () => {
     expect(env.METRICS_HOST).toBe('127.0.0.1');
     expect(env.METRICS_PORT).toBe(9464);
     expect(env.LOG_DIR).toBeUndefined();
+    expect(env.LOG_ROLL_SIZE).toBe('10m');
     expect(env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://127.0.0.1:4318');
   });
 
@@ -108,6 +109,7 @@ describe('observability settings', () => {
     ['OTEL_EXPORTER_OTLP_ENDPOINT', 'not a url'],
     ['METRICS_PORT', '70000'],
     ['METRICS_PORT', 'abc'],
+    ['LOG_ROLL_SIZE', '10 MB'],
   ])('rejects an invalid %s', (name, value) => {
     expect(() => validateEnv({ APP_ENV: 'dev', [name]: value })).toThrow(name);
   });

@@ -144,7 +144,7 @@ Consumer group: `kafka-pay-lab-payments`.
 All in `.env` (see `.env.example`): `KAFKA_ENABLED`, `PSP_URL`, `PSP_TIMEOUT_MS`, `CB_FAILURE_THRESHOLD`,
 `CB_RESET_TIMEOUT_MS`, `PAYMENT_MAX_ATTEMPTS`, `PAYMENT_RETRY_BASE_MS`, `OUTBOX_POLL_MS`, `LAG_POLL_MS`.
 Observability: `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `METRICS_ENABLED`, `METRICS_HOST`, `METRICS_PORT`,
-`LOG_DIR`, `GRAFANA_PORT`, `GRAFANA_ADMIN_PASSWORD`.
+`LOG_DIR`, `LOG_ROLL_SIZE`, `GRAFANA_PORT`, `GRAFANA_ADMIN_PASSWORD`.
 To speed up experiments try `CB_RESET_TIMEOUT_MS=3000`. The simulator port is `PSP_SIM_PORT` (default 4100).
 
 While the breaker is open the API log shows `Circuit open: holding the current message` once per probe

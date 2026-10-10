@@ -42,7 +42,7 @@ export class ChargesController {
       });
       const span = trace.getActiveSpan()?.spanContext();
       // The card token and amount stay out of the log; the key is the payment id.
-      logLine(process.env.LOG_DIR, {
+      logLine({
         msg: 'charge',
         level: 'info',
         idempotency_key: key,
