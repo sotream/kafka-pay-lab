@@ -185,6 +185,16 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   LOG_DIR?: string;
 
+  /** Published outbox rows older than this many days are deleted. 0 turns the cleanup off. */
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  OUTBOX_RETENTION_DAYS = 14;
+
+  @IsString()
+  @IsNotEmpty()
+  OUTBOX_CLEANUP_CRON = '0 4 * * *';
+
   /** Size at which a log file rolls (pino-roll syntax: a number and k, m or g). Five files are kept. */
   @Matches(/^\d+[kmg]$/)
   LOG_ROLL_SIZE = '10m';
@@ -212,6 +222,9 @@ export function consistencyProblems(env: EnvironmentVariables): string[] {
   }
   if (env.REFRESH_REVOKED_RETENTION_DAYS < env.REFRESH_TOKEN_TTL_DAYS) {
     problems.push('REFRESH_REVOKED_RETENTION_DAYS must be at least REFRESH_TOKEN_TTL_DAYS');
+  }
+  if (!validateCronExpression(env.OUTBOX_CLEANUP_CRON).valid) {
+    problems.push('OUTBOX_CLEANUP_CRON must be a valid cron expression');
   }
   return problems;
 }

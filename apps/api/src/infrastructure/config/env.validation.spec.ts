@@ -114,3 +114,26 @@ describe('observability settings', () => {
     expect(() => validateEnv({ APP_ENV: 'dev', [name]: value })).toThrow(name);
   });
 });
+
+describe('outbox retention settings', () => {
+  it('keeps published rows for 14 days and cleans up daily at 04:00 by default', () => {
+    const env = validateEnv({ APP_ENV: 'dev' });
+
+    expect(env.OUTBOX_RETENTION_DAYS).toBe(14);
+    expect(env.OUTBOX_CLEANUP_CRON).toBe('0 4 * * *');
+  });
+
+  it('accepts 0 to switch the cleanup off', () => {
+    expect(validateEnv({ APP_ENV: 'dev', OUTBOX_RETENTION_DAYS: '0' }).OUTBOX_RETENTION_DAYS).toBe(
+      0,
+    );
+  });
+
+  it.each([
+    ['OUTBOX_RETENTION_DAYS', '-1'],
+    ['OUTBOX_RETENTION_DAYS', 'abc'],
+    ['OUTBOX_CLEANUP_CRON', 'not a cron'],
+  ])('rejects an invalid %s', (name, value) => {
+    expect(() => validateEnv({ APP_ENV: 'dev', [name]: value })).toThrow(name);
+  });
+});
