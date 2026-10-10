@@ -6,6 +6,7 @@ import type { EnvironmentVariables } from '../config/env.validation.js';
 import { EVENT_PUBLISHER } from '../messaging/event-publisher.port.js';
 import type { EventPublisher } from '../messaging/event-publisher.port.js';
 import { OutboxEvent } from './entities/outbox-event.entity.js';
+import { OutboxCleanupService } from './outbox-cleanup.service.js';
 import { OutboxRelay } from './outbox-relay.js';
 import { OutboxService } from './outbox.service.js';
 
@@ -13,6 +14,7 @@ import { OutboxService } from './outbox.service.js';
   imports: [TypeOrmModule.forFeature([OutboxEvent])],
   providers: [
     OutboxService,
+    OutboxCleanupService,
     {
       provide: OutboxRelay,
       inject: [DataSource, EVENT_PUBLISHER, ConfigService],

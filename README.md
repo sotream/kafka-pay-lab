@@ -143,6 +143,8 @@ Consumer group: `kafka-pay-lab-payments`.
 
 All in `.env` (see `.env.example`): `KAFKA_ENABLED`, `PSP_URL`, `PSP_TIMEOUT_MS`, `CB_FAILURE_THRESHOLD`,
 `CB_RESET_TIMEOUT_MS`, `PAYMENT_MAX_ATTEMPTS`, `PAYMENT_RETRY_BASE_MS`, `OUTBOX_POLL_MS`, `LAG_POLL_MS`.
+Published outbox rows are deleted after `OUTBOX_RETENTION_DAYS` (default 14, 0 = keep forever) by a job on
+`OUTBOX_CLEANUP_CRON` (default `0 4 * * *`); unpublished rows are never deleted ([ADR 0014](docs/adr/0014-outbox-retention.md)).
 Observability: `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `METRICS_ENABLED`, `METRICS_HOST`, `METRICS_PORT`,
 `LOG_DIR`, `LOG_ROLL_SIZE`, `GRAFANA_PORT`, `GRAFANA_ADMIN_PASSWORD`.
 To speed up experiments try `CB_RESET_TIMEOUT_MS=3000`. The simulator port is `PSP_SIM_PORT` (default 4100).
