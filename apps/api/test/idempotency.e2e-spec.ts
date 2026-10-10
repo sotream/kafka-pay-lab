@@ -36,7 +36,13 @@ describe('Idempotency-Key on POST /payments (e2e)', () => {
 
     const reused = await post({ ...body, amount: 2000 }, '"k-2"').expect(422);
 
-    expect(reused.body).toMatchObject({ statusCode: 422 });
+    expect(reused.headers['content-type']).toMatch(/^application\/problem\+json/);
+    expect(reused.body).toMatchObject({
+      type: 'about:blank',
+      title: 'Unprocessable Entity',
+      status: 422,
+      code: 'IDEMPOTENCY_KEY_REUSED',
+    });
     expect(await count('payments')).toBe(1);
     expect(await count('outbox_events')).toBe(1);
   });
@@ -44,7 +50,13 @@ describe('Idempotency-Key on POST /payments (e2e)', () => {
   it.each(['plain', '"unterminated', '""', `"${'x'.repeat(256)}"`])(
     'answers 400 for the malformed key %s',
     async (key) => {
-      await post(body, key).expect(400);
+      const res = await post(body, key).expect(400);
+
+      expect(res.body).toMatchObject({
+        status: 400,
+        code: 'IDEMPOTENCY_KEY_MALFORMED',
+        errors: [{ pointer: '#/headers/Idempotency-Key' }],
+      });
       expect(await count('payments')).toBe(0);
     },
   );

@@ -75,7 +75,10 @@ describe('payments (e2e, Kafka disabled)', () => {
   });
 
   it('answers 404 for an unknown load job', async () => {
-    await http().get('/api/v1/payments/load/no-such-job').expect(404);
+    const res = await http().get('/api/v1/payments/load/no-such-job').expect(404);
+
+    expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+    expect(res.body).toMatchObject({ status: 404, code: 'LOAD_JOB_NOT_FOUND' });
   });
 
   it('reads one payment by id, without the card token', async () => {
@@ -91,7 +94,12 @@ describe('payments (e2e, Kafka disabled)', () => {
   });
 
   it('answers 404 for an unknown payment and 400 for an id that is not a UUID', async () => {
-    await http().get('/api/v1/payments/6f1c2f0e-3b53-4c6b-9f0e-2d2b8b1f7a11').expect(404);
-    await http().get('/api/v1/payments/not-a-uuid').expect(400);
+    const missing = await http()
+      .get('/api/v1/payments/6f1c2f0e-3b53-4c6b-9f0e-2d2b8b1f7a11')
+      .expect(404);
+    const malformed = await http().get('/api/v1/payments/not-a-uuid').expect(400);
+
+    expect(missing.body).toMatchObject({ status: 404, code: 'PAYMENT_NOT_FOUND' });
+    expect(malformed.headers['content-type']).toMatch(/^application\/problem\+json/);
   });
 });

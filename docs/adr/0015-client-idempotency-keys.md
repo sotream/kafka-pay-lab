@@ -43,7 +43,7 @@ Standards changes around it:
   `{ accepted, jobId }` (`accepted` stays for the dashboard). `GET .../load/:jobId` reports
   `{ id, total, created, failed, done }`.
 - The lab's own errors are built in one function (`payment-errors.ts`) in the current NestJS shape, so
-  moving them to RFC 9457 problem details later is a change in one place.
+  moving them to RFC 9457 problem details was a change in one place ([ADR 0016](0016-http-standards-conformance.md)).
 
 ## Deliberate deviations (kept)
 
@@ -69,11 +69,11 @@ Standards changes around it:
   Living Standard suggests a comment about every 15 seconds). The browser's default reconnection time
   applies.
 
-## Not in this change (to mirror from the starter)
+## Mirrored later
 
-RFC 9457 problem details as the shared error shape (with `errors: [{ pointer, detail }]`), JWT algorithm,
-issuer and audience checks, cookie attributes, `405` with `Allow`, bearer-token parsing and `Location`
-conventions for the starter's routes.
+RFC 9457 problem details, JWT pinning with issuer and audience, `WWW-Authenticate`, bearer parsing and the
+other conventions of the starter were taken over in [ADR 0016](0016-http-standards-conformance.md). The lab's
+errors from this ADR use that shape now (`payment-errors.ts` builds them, the filter formats them).
 
 ## Consequences
 
