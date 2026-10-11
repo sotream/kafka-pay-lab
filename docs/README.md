@@ -20,6 +20,7 @@
 |              | [0013 Rolling log files](adr/0013-log-file-rotation.md)                           |
 |              | [0014 Outbox retention](adr/0014-outbox-retention.md)                             |
 |              | [0015 Client idempotency keys](adr/0015-client-idempotency-keys.md)               |
+|              | [0016 HTTP standards conformance](adr/0016-http-standards-conformance.md)         |
 | Guides       | [Getting started](guides/getting-started.md)                                      |
 |              | [Database and migrations](guides/database-and-migrations.md)                      |
 |              | [Authentication](guides/authentication.md)                                        |

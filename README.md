@@ -177,6 +177,13 @@ pnpm test:e2e         # needs pnpm infra:up; the payments flow test also needs K
 pnpm obs:up | obs:down | obs:scenario | check:obs
 ```
 
+## HTTP conventions
+
+Errors are RFC 9457 problem documents (`application/problem+json`, with a `code` to branch on and `errors` per
+field for validation). Access tokens are HS256 JWTs checked for issuer and audience. A 401 carries
+`WWW-Authenticate`, a 201 a `Location`. What follows which standard, and every deliberate deviation, is in
+[ADR 0016](docs/adr/0016-http-standards-conformance.md); the provider simulator keeps its own simple error JSON.
+
 ## Known limits
 
 Lab-grade on purpose: the dashboard needs a sign-in but the payments and stream API endpoints are public (no login), there

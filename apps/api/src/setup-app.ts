@@ -6,26 +6,47 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Registry } from '@prometheus-io/client';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import { requireJsonBody } from './common/http/require-json-body.js';
+import { ProblemDetailsFilter } from './common/problem-details/problem-details.filter.js';
+import { validationExceptionFactory } from './common/problem-details/validation-errors.js';
 import type { EnvironmentVariables } from './infrastructure/config/env.validation.js';
 import { httpMetrics } from './infrastructure/metrics/http-metrics.js';
 
 /** Every JSON body in this API is a few hundred bytes; the express default (100kb) is already generous. */
 const JSON_BODY_LIMIT = '100kb';
 
+/** Browsers cap this at a few minutes to hours anyway; ten minutes saves a preflight per request. */
+const PREFLIGHT_MAX_AGE_SECONDS = 600;
+
 /** HTTP-level setup shared by the real server and e2e tests, so tests exercise the same behaviour. */
 export function configureApp(app: NestExpressApplication): void {
   const config = app.get<ConfigService<EnvironmentVariables, true>>(ConfigService);
 
-  app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
-  // First, so requests that are rejected further down are still counted.
+  app.disable('x-powered-by');
+  // First, so requests that are rejected further down (a bad body, a missing token) are still counted.
   app.use(httpMetrics(app.get(Registry)));
+  // Security headers and CORS come before the body parser so that its errors carry them too.
   app.use(helmet());
+  app.enableCors({
+    origin: config.get('WEB_ORIGIN', { infer: true }),
+    credentials: true,
+    // Headers outside the CORS safelist are invisible to browser scripts unless exposed.
+    exposedHeaders: ['Retry-After', 'Location', 'X-Request-Id'],
+    maxAge: PREFLIGHT_MAX_AGE_SECONDS,
+  });
+  app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
+  app.use(requireJsonBody);
   app.use(cookieParser());
-  app.enableCors({ origin: config.get('WEB_ORIGIN', { infer: true }), credentials: true });
+  app.useGlobalFilters(new ProblemDetailsFilter());
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      exceptionFactory: validationExceptionFactory,
+    }),
   );
 }
 

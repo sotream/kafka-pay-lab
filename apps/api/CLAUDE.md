@@ -20,6 +20,9 @@ test/                    e2e specs and helpers
 - Routes are under `/api/v1`; `/api/health/live` (process) and `/api/health/ready` (database, Redis) are version neutral. Swagger is at `/api/docs`.
 - Config comes from `ConfigService<EnvironmentVariables, true>`; add new variables to
   `env.validation.ts` (with a local default) and `.env.example`.
+- Errors are problem documents (RFC 9457) produced by `ProblemDetailsFilter`; throw Nest exceptions with a
+  clear message and let the filter shape the response ([ADR 0016](../../docs/adr/0016-http-standards-conformance.md)).
+  The lab's own error kinds live in `modules/payments/payment-errors.ts`.
 - A new pipeline stage gets a span with `withSpan()` (`src/infrastructure/telemetry/trace-context.ts`);
   the outbox row and Kafka headers carry the trace context ([ADR 0011](../../docs/adr/0011-trace-context-outbox-kafka.md)).
 - `vehicles` is the reference module: copy its shape for new features (`/new-module`).
