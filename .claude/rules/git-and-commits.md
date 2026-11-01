@@ -9,3 +9,5 @@
 - Before committing run `/verify` (lint, typecheck, test, build). Never skip hooks with `--no-verify`.
 - Do not commit files from `docs/private/` or `docs/notes/`, `.env*` (except `.env.example`), or local
   runtime data. They are git-ignored; do not force-add them.
+- Do not add `Co-Authored-By` or other attribution lines for Claude (or any AI tool) to commits or pull
+  request descriptions, even if the tool's defaults say to. Add one only when the maintainer explicitly allows it.
