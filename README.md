@@ -154,6 +154,13 @@ To speed up experiments try `CB_RESET_TIMEOUT_MS=3000`. The simulator port is `P
 While the breaker is open the API log shows `Circuit open: holding the current message` once per probe
 cycle; the consumer keeps its group membership with heartbeats and never crashes.
 
+How the held message stays alive: kafkajs has no background heartbeat timer while `eachMessage` runs, so the
+handler sleeps in 3 s steps and calls `heartbeat()` after each one. That is well under the group's 30 s
+`sessionTimeout`, so the broker does not treat the member as dead and does not rebalance. The handler never
+throws while waiting, because every error out of `eachMessage` spends kafkajs's retry budget and a long outage
+would crash the consumer. If a rebalance starts anyway, `heartbeat()` throws and the message is redelivered
+after the rebalance (harmless with one instance).
+
 ## Repo layout
 
 ```
@@ -187,4 +194,6 @@ field for validation). Access tokens are HS256 JWTs checked for issuer and audie
 ## Known limits
 
 Lab-grade on purpose: the dashboard needs a sign-in but the payments and stream API endpoints are public (no login), there
-is one consumer instance, and retry counts restart if the API restarts mid-message.
+is one consumer instance, and retry counts restart if the API restarts mid-message. The last one can mean extra
+provider calls for a payment, a known trade-off of the lab; in production the attempt counter would live in the
+database or in the message itself.
