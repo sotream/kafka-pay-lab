@@ -80,7 +80,7 @@ services:
   # --- Observability stack: only started with `--profile observability` (pnpm obs:up). Ports are loopback-only. ---
   otel-collector:
     profiles: ['observability']
-    image: otel/opentelemetry-collector:0.163.2-386@sha256:6af85116b470638e039d957f130990f0de7aaa46e51863e8c133e83590758992
+    image: otel/opentelemetry-collector:0.164.0@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750
     command: ['--config=/etc/otelcol/config.yaml']
     volumes:
       - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
